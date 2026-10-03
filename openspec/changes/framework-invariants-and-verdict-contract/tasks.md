@@ -60,7 +60,8 @@
 
 - [x] 7.1 Apply every ECA of both laws in turn and assert subject monotonicity: no accepted act removes an individual from the graph, and every subject present before an act is still present after it, failing with the act and the removed individual named
 - [x] 7.2 Verify a process instance finished with an outcome that does not count its contributions retains every individual it accumulated, and that recording non-count is the only lever available over a past fact
-- [ ] 7.3 Verify a process terminating at a moment inside one of its calendar spans records that finish bound on its `Chronoid` with no new vocabulary, and that the finished instance reads identically to one ending on a calendar point
+- [x] 7.3 Verify a process terminating at a moment inside one of its calendar spans records that finish bound on its `Chronoid` with no new vocabulary, and that the finished instance reads identically to one ending on a calendar point
+  - Every clause verified except the WHEN as worded: a finish at day 12 hour 14 (not a declared calendar point) against day 10 hour 19 gives a bound on the Chronoid, a plain `gfo-light:TimeBoundary` carrying both `ph:dayIndex` and `ph:atHour`, no undeclared predicate, and a structurally identical graph. No shipped law can finish *inside* a span -- both endings are guarded behind polls closing, and every span ends at a polls-close point -- so the WHEN is recorded as an artefact gap under the scenario in `specs/law-framework/spec.md` rather than asserted as tested. See 3.5, which delivers the minting the scenario's own motivating law shape would need.
 
 ## 8. Freeze, docs, and validation
 

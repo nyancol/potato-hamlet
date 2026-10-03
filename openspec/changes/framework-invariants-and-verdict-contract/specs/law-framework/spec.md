@@ -204,6 +204,8 @@ Identity SHALL hold across the graph, the verdict, and the seed for entities min
 - **WHEN** a candidate withdraws during polls and the election is stopped part-way through
 - **THEN** the ballots already cast remain in the graph as labelled individuals, the instance's outcome records that they do not count, and no transition is available that would erase them
 
+Also verified with a structurally equivalent ending rather than the one named. A mid-poll stop needs a law shape neither shipped law has; what `mayor-quorum` does have is a failed quorum at polls close, which exercises every clause of the `THEN` — the ballot cast before the failure is still in the graph and still typed `ph:CastVote`, the instance's `ph:outcome` records `void`, the successor starts from a fresh registry rather than inheriting anything, and no act exists that removes the ballot. What is untested is specifically a stop *during* polling, with ballots cast on both sides of it.
+
 #### Scenario: No act removes an individual
 - **WHEN** every ECA of a law is applied in turn to a graph and each resulting graph is compared with its input
 - **THEN** every subject present before an accepted act is still present after it, so no act deletes an individual whatever the law intends
@@ -215,6 +217,8 @@ Identity SHALL hold across the graph, the verdict, and the seed for entities min
 #### Scenario: Termination mid-span is ordinary
 - **WHEN** a process terminates at a moment inside one of its calendar spans rather than at a declared point
 - **THEN** its `Chronoid` carries that finish bound, no new vocabulary is required to express it, and the finished instance is read the same way as one ending on a calendar point
+
+The scenario stands as written. No law shipped with this change instantiates it, and that is a gap in the artefacts rather than a weaker promise: every ending both shipped laws have — `proclaim`, and `repeat` on a failed quorum — is guarded behind polls closing, and every span they declare ends at a polls-close point, so no finish can land strictly inside one. What is verified is the requirement the scenario illustrates, exercised with a finish at a moment that is not a declared calendar point (`scripts/test_cancellation.py`, day 12 hour 14 against day 10 hour 19): the bound sits on the `Chronoid`, is a plain `gfo-light:TimeBoundary` carrying both `ph:dayIndex` and `ph:atHour`, uses no predicate the ontology has not declared, and yields a structurally identical graph to a finish on a calendar point. Exercising the `WHEN` needs a law that halts mid-span and postpones, which no current change builds.
 
 #### Scenario: Occurrence is an instance of its phase
 - **WHEN** a citizen nominates inside a nomination window
