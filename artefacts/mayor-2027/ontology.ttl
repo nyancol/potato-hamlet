@@ -27,9 +27,12 @@ ph:label a owl:DatatypeProperty ;
 ph:atDate a owl:DatatypeProperty ;
   rdfs:subPropertyOf gfo-core:dateTimeValue .
 
+# Domain is the GFO category, not a ph: subclass: the hour of a moment sits on
+# ph:Clock, on a ph:CalendarPoint, and on the plain gfo-light:TimeBoundary
+# individuals the oracle mints as a Chronoid's start and finish bounds.
 ph:atHour a owl:DatatypeProperty ;
   rdfs:subPropertyOf gfo-core:decimalValue ;
-  rdfs:domain ph:Clock , ph:CalendarPoint ;
+  rdfs:domain gfo-light:TimeBoundary ;
   rdfs:range xsd:integer .
 
 # A span whose length is a gap rather than a position. The base calendar is

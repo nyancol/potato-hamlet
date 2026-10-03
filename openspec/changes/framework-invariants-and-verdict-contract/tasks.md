@@ -58,8 +58,8 @@
 
 ## 7. Cancellation semantics
 
-- [ ] 7.1 Apply every ECA of both laws in turn and assert subject monotonicity: no accepted act removes an individual from the graph, and every subject present before an act is still present after it, failing with the act and the removed individual named
-- [ ] 7.2 Verify a process instance finished with an outcome that does not count its contributions retains every individual it accumulated, and that recording non-count is the only lever available over a past fact
+- [x] 7.1 Apply every ECA of both laws in turn and assert subject monotonicity: no accepted act removes an individual from the graph, and every subject present before an act is still present after it, failing with the act and the removed individual named
+- [x] 7.2 Verify a process instance finished with an outcome that does not count its contributions retains every individual it accumulated, and that recording non-count is the only lever available over a past fact
 - [ ] 7.3 Verify a process terminating at a moment inside one of its calendar spans records that finish bound on its `Chronoid` with no new vocabulary, and that the finished instance reads identically to one ending on a calendar point
 
 ## 8. Freeze, docs, and validation

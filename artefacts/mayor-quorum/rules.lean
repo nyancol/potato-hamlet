@@ -55,7 +55,52 @@ structure Cycle where
   counted : Bool
   proclaimed : Bool
   outcome : Option String  -- none = ongoing, some "void", some "valid"
+  -- The moments the Chronoid's start and finish bounds denote. A GFO
+  -- TimeBoundary names ONE moment, so a bound has to record when the
+  -- instance actually began and ended -- not the cycle's current day, which
+  -- keeps moving and would rewrite a bound that already happened.
+  startDay : Option Nat
+  startHour : Option Nat
+  finishDay : Option Nat
+  finishHour : Option Nat
 deriving Repr, DecidableEq
+
+/-- The day an instance began on, defaulting to its current day before it
+    has been stamped. -/
+def Cycle.startDayOf (c : Cycle) : Nat :=
+  match c.startDay with
+  | some d => d
+  | none => c.day
+
+def Cycle.startHourOf (c : Cycle) : Nat :=
+  match c.startHour with
+  | some h => h
+  | none => c.hour
+
+def Cycle.finishDayOf (c : Cycle) : Nat :=
+  match c.finishDay with
+  | some d => d
+  | none => c.day
+
+def Cycle.finishHourOf (c : Cycle) : Nat :=
+  match c.finishHour with
+  | some h => h
+  | none => c.hour
+
+/-- Record the moment the instance began, if it has not been recorded. -/
+def Cycle.stampStart (c : Cycle) : Cycle :=
+  { c with
+    startDay := some c.startDayOf
+    startHour := some c.startHourOf }
+
+/-- Record the moment the instance ended, if it has not been recorded. -/
+def Cycle.stampFinish (c : Cycle) : Cycle :=
+  { c with
+    finishDay := some c.finishDayOf
+    finishHour := some c.finishHourOf }
+
+def Cycle.started (c : Cycle) : Bool :=
+  c.announced || c.prepared || c.counted || c.proclaimed
 
 /-- Closed-world snapshot: enumerates the full finite population plus the
     full election-cycle history. TTL ids = JSON ids = Lean ids.
@@ -154,6 +199,7 @@ instance : FromJson Cycle where
     let outcome ← getOptStr j "outcome"
     return Cycle.mk id day hour candidates ballots registry box
       announced prepared counted proclaimed outcome
+      none none none none
 
 instance : FromJson Snapshot where
   fromJson? j := do
@@ -421,13 +467,42 @@ def registryIn (g : Graph) (cyc : String) : List String :=
 def outcomeIn (g : Graph) (cyc : String) : Option String :=
   g.litOf? cyc (ph "outcome")
 
+/-- The moment a Chronoid bound denotes, read as (day, hour).
+
+    The Chronoid is the record of when an instance began and ended, so this
+    reads the bound rather than recomputing it: a consumer following
+    `temporallyFinishedBy` gets a day it can place, and so does the oracle
+    when it reconstructs the next snapshot. -/
+def boundMoment (g : Graph) (ch : String) (which : String) : Option (Nat × Nat) :=
+  match g.iriOf? ch which with
+  | some b => some (g.natOf b (ph "dayIndex"), g.natOf b (ph "atHour"))
+  | none => none
+
+def startedAt (g : Graph) (cyc : String) : Option (Nat × Nat) :=
+  match g.iriOf? cyc (ph "hasTime") with
+  | some ch => boundMoment g ch "https://w3id.org/gfo-core/temporallyStartedBy"
+  | none => none
+
+def finishedAt (g : Graph) (cyc : String) : Option (Nat × Nat) :=
+  match g.iriOf? cyc (ph "hasTime") with
+  | some ch => boundMoment g ch "https://w3id.org/gfo-core/temporallyFinishedBy"
+  | none => none
+
 def cycleOf (g : Graph) (cyc : String) : Cycle :=
-  Cycle.mk cyc
+  let base := Cycle.mk cyc
     (g.natOf cyc (ph "dayIndex")) (g.natOf cyc (ph "atHour"))
     (candidatesIn g cyc) (ballotsIn g cyc) (registryIn g cyc) (votesIn g cyc)
     (flagOn g cyc "announced") (flagOn g cyc "prepared")
     (flagOn g cyc "counted") (flagOn g cyc "proclaimed")
     (outcomeIn g cyc)
+    none none none none
+  let withStart :=
+    match startedAt g cyc with
+    | some (d, h) => { base with startDay := some d, startHour := some h }
+    | none => base
+  match finishedAt g cyc with
+  | some (d, h) => { withStart with finishDay := some d, finishHour := some h }
+  | none => withStart
 
 def snapshotOf (g : Graph) : Snapshot :=
   { citizens := citizensOf g
@@ -450,6 +525,7 @@ def cur (s : Snapshot) : Cycle :=
   match s.cycles.getLast? with
   | some c => c
   | none => Cycle.mk "" 0 0 [] [] [] [] false false false false none
+      none none none none
 
 def updateCur (s : Snapshot) (f : Cycle → Cycle) : Snapshot :=
   match s.cycles with
@@ -643,6 +719,7 @@ def voidCycle? (s : Snapshot) : Bool :=
     flags cleared, day set to the next E-day. -/
 def freshCycle (k : Nat) : Cycle :=
   Cycle.mk (cycleIri k) (electionDayK k) 0 [] [] [] [] false false false false none
+    none none none none
 
 /-! Uniform oracle interface. -/
 
@@ -744,7 +821,7 @@ def applyAnnounce (s : Snapshot) : Except String Snapshot :=
   match authorityId s with
   | none => .error "no authority in office"
   | some _ =>
-    if announceDue? s then .ok (updateCur s (fun c => { c with announced := true }))
+    if announceDue? s then .ok (updateCur s (fun c => ({ c with announced := true }).stampStart))
     else .error "announce not due"
 
 def applyNominate (s : Snapshot) (c : String) : Except String Snapshot :=
@@ -760,7 +837,7 @@ def applyPrepare (s : Snapshot) : Except String Snapshot :=
   | none => .error "no authority in office"
   | some _ =>
     if prepareDue? s then
-      let cy := { cur s with prepared := true }
+      let cy := ({ cur s with prepared := true }).stampStart
       let cy2 := { cy with ballots := fullBallots s.citizens (cur s).candidates }
       .ok (updateCur s (fun _ => cy2))
     else .error "prepare not due"
@@ -771,7 +848,7 @@ def applyVote (s : Snapshot) (v c : String) : Except String Snapshot :=
   else .ok (updateCur s (fun cy => { cy with box := Vote.mk v c :: cy.box }))
 
 def applyCount (s : Snapshot) : Except String Snapshot :=
-  if countDue? s then .ok (updateCur s (fun c => { c with counted := true }))
+  if countDue? s then .ok (updateCur s (fun c => ({ c with counted := true }).stampStart))
   else .error "count not due"
 
 def applyProclaim (s : Snapshot) : Except String Snapshot :=
@@ -779,7 +856,8 @@ def applyProclaim (s : Snapshot) : Except String Snapshot :=
   | none => .error "no candidates"
   | some w =>
     if proclaimDue? s then
-      let sPrime := updateCur s (fun c => { c with proclaimed := true, outcome := some "valid" })
+      let sPrime := updateCur s (fun c =>
+          (({ c with proclaimed := true, outcome := some "valid" }).stampStart).stampFinish)
       .ok { sPrime with mayorId := some w }
     else .error "proclaim not due"
 
@@ -789,7 +867,7 @@ def applyProclaim (s : Snapshot) : Except String Snapshot :=
 def repeatAfterVoid (s : Snapshot) : Except String Snapshot :=
   if voidCycle? s then
     let k := curIdx s
-    let marked := updateCur s (fun c => { c with outcome := some "void" })
+    let marked := updateCur s (fun c => ({ c with outcome := some "void" }).stampFinish)
     .ok { marked with cycles := marked.cycles ++ [freshCycle (k + 1)] }
   else .error "quorum not failed"
 
@@ -855,28 +933,36 @@ def ensureCycle (g : Graph) (k : Nat) (c : Cycle) : Graph :=
   -- Lifecycle bounds take GFO's shape: the Chronoid's start and finish point
   -- at TimeBoundary individuals. Absence of a START bound is what marks an
   -- instance initialised (awaiting its trigger) rather than ongoing.
-  let started := c.announced || c.prepared || c.counted || c.proclaimed
-  let boundDay := ph "bound/day/" ++ shortId c.id
-  let boundHour := ph "bound/hour/" ++ shortId c.id
-  let boundaryTriples : List Triple :=
-    [ { subject := boundDay, predicate := rdfType
-      , object := .iri "https://w3id.org/gfo-light/TimeBoundary" }
-    , { subject := boundDay, predicate := ph "dayIndex"
-      , object := TripleObj.lit (toString c.day) "integer" }
-    , { subject := boundHour, predicate := rdfType
-      , object := .iri "https://w3id.org/gfo-light/TimeBoundary" }
-    , { subject := boundHour, predicate := ph "atHour"
-      , object := TripleObj.lit (toString c.hour) "integer" } ]
-  let withBoundaries : Graph := withOutcome ++ boundaryTriples
+  let started := c.started
+  -- Each bound denotes ONE moment, so it carries BOTH the day and the hour.
+  -- Splitting them across two boundaries — start pointing at the day, finish
+  -- at the hour — left the finish time unreadable: a consumer following
+  -- temporallyFinishedBy got an hour with no day to put it in.
+  let boundStart := ph "bound/start/" ++ shortId c.id
+  let boundFinish := ph "bound/finish/" ++ shortId c.id
+  -- Written with setOne, not appended. Appending would leave a fresh
+  -- dayIndex and atHour on every apply, so the bound would accumulate a
+  -- different moment each time and a reader following temporallyFinishedBy
+  -- would get whichever one it happened to see.
+  let timeBoundary (g : Graph) (which : String) (d h : Nat) : Graph :=
+    let g1 := Graph.setOne g which rdfType
+      (.iri "https://w3id.org/gfo-light/TimeBoundary")
+    let g2 := Graph.setOne g1 which (ph "dayIndex") (TripleObj.lit (toString d) "integer")
+    Graph.setOne g2 which (ph "atHour") (TripleObj.lit (toString h) "integer")
+  -- The bound carries the moment the transition HAPPENED, not the cycle's
+  -- current position, which keeps moving for the rest of the law's run.
+  let withBoundaries : Graph :=
+    timeBoundary (timeBoundary withOutcome boundStart c.startDayOf c.startHourOf)
+      boundFinish c.finishDayOf c.finishHourOf
   let withBounds : Graph :=
     let g1 : Graph :=
       if started then
         Graph.setOne withBoundaries chronoid
-          "https://w3id.org/gfo-core/temporallyStartedBy" (.iri boundDay)
+          "https://w3id.org/gfo-core/temporallyStartedBy" (.iri boundStart)
       else withBoundaries
     if c.outcome.isSome then
       Graph.setOne g1 chronoid
-        "https://w3id.org/gfo-core/temporallyFinishedBy" (.iri boundHour)
+        "https://w3id.org/gfo-core/temporallyFinishedBy" (.iri boundFinish)
     else g1
   withBounds
 
