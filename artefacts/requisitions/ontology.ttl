@@ -1,0 +1,174 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Frozen schema (TBox): classes and properties only. Individuals live at
+# runtime — seeded ones in population.ttl, minted ones by the oracle.
+#
+# This law is here to exercise the one thing the two mayor laws cannot: a
+# PROCESS TYPE WITH SEVERAL ONGOING INSTANCES AT ONCE. A requisition is
+# lodged, reviewed and settled on its own lifecycle, independently of any
+# other requisition, so three of them can be open simultaneously and an
+# officer's duty has to say which one it is about.
+
+# ------------------------------------------------------------------
+# Framework invariants (required of every law)
+# ------------------------------------------------------------------
+
+ph:Citizen rdfs:subClassOf gfo-light:Object .
+ph:Clock rdfs:subClassOf gfo-light:TimeBoundary .
+ph:CalendarPoint rdfs:subClassOf gfo-light:TimeBoundary .
+ph:CalendarSpan rdfs:subClassOf gfo-light:Chronoid .
+
+ph:label a owl:DatatypeProperty ;
+  rdfs:subPropertyOf rdfs:label ;
+  rdfs:range xsd:string .
+
+ph:atDate a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:dateTimeValue .
+
+# Domain is the GFO category, not a ph: subclass: the hour of a moment sits on
+# ph:Clock, on a ph:CalendarPoint, and on the plain gfo-light:TimeBoundary
+# individuals the oracle mints as a Chronoid's start and finish bounds.
+ph:atHour a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:domain gfo-light:TimeBoundary ;
+  rdfs:range xsd:integer .
+
+ph:dayIndex a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:range xsd:integer .
+
+# A calendar node names the Process phase it bounds. Grounded by TYPE rather
+# than by subproperty: the base calendar is frozen and shared, so its object
+# can only be a phase CLASS -- an instance does not exist yet at review time.
+ph:marksPhase a owl:ObjectProperty ;
+  rdfs:domain gfo-light:Chronoid , gfo-light:TimeBoundary ;
+  rdfs:range gfo-core:Process .
+
+ph:age a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:domain ph:Citizen ;
+  rdfs:range xsd:integer .
+
+# ------------------------------------------------------------------
+# Relationship vocabulary (framework, GFO-grounded)
+# ------------------------------------------------------------------
+
+ph:hasPhase a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasSituationPart .
+
+ph:hasParticipant a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasParticipant .
+
+# Direction is situation -> time; the Chronoid then carries the bounds.
+ph:hasTime a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasTime .
+
+ph:relates a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:relates .
+
+ph:containsRole a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:containsRole .
+
+ph:qualityOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:qualityOf .
+
+# A State can bring about a change in a Process: a permitted dependency, not
+# an evaluated one. Never used for ordering between phases.
+ph:causedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:causedBy .
+
+# Both sides of every Role.
+ph:roleIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:roleIn .
+
+ph:playedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:playedBy .
+
+# ------------------------------------------------------------------
+# Law vocabulary
+# ------------------------------------------------------------------
+
+ph:Hamlet rdfs:subClassOf gfo-light:ObjectAggregate .
+ph:Townhall rdfs:subClassOf gfo-light:Object .
+ph:Goods rdfs:subClassOf gfo-light:InformationObject .
+ph:RequisitionForm rdfs:subClassOf gfo-light:InformationObject .
+ph:RequisitionRecord rdfs:subClassOf gfo-light:InformationObject .
+
+ph:OfficerRole rdfs:subClassOf gfo-light:Role .
+ph:RequisitionerRole rdfs:subClassOf gfo-light:Role .
+
+# The sum asked for. A decimal like any other.
+ph:sum a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:range xsd:integer .
+
+# What a requisition currently is: open, approved, refused or withdrawn.
+# Readable rather than computed, so the verdict's `phase` resolves by IRI.
+ph:status a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:stringValue ;
+  rdfs:range xsd:string .
+
+# The requisition's outcome, once it has one.
+ph:outcome a owl:DatatypeProperty ;
+  rdfs:subPropertyOf gfo-core:stringValue ;
+  rdfs:range xsd:string .
+
+# The goods a requisition is for. A relation, not a datatype: the requisition
+# and the goods are separate entities.
+ph:goods a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:relates .
+
+# The form a citizen lodges, and the record posted on decision.
+ph:formOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:relates .
+
+ph:recordOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:relates .
+
+# ------------------------------------------------------------------
+# Declared process hierarchy
+# Each requisition runs through lodging and settling. Those two ARE
+# time-scoped, so both are marked by a calendar node; the requisition that
+# contains them is not.
+# ------------------------------------------------------------------
+
+# The root Process class, and a PER-OCCURRENCE one: several requisitions are
+# ongoing at once, each with its own Chronoid and outcome. It is deliberately
+# NOT a phase of a wider cycle -- a requisition is not a moment on a shared
+# timeline, so it is not marked by a calendar node, and modelling it as a
+# phase of a cycle would assert a shared bound it does not have.
+ph:Requisition rdfs:subClassOf gfo-core:Process .
+ph:LodgeRequisition rdfs:subClassOf gfo-core:Process .
+ph:SettleRequisition rdfs:subClassOf gfo-core:Process .
+
+# The states a requisition moves through. Declared so `phase` is resolvable by
+# IRI lookup rather than by a law-chosen string comparison.
+ph:RequisitionOpen rdfs:subClassOf gfo-core:State .
+ph:RequisitionApproved rdfs:subClassOf gfo-core:State .
+ph:RequisitionRefused rdfs:subClassOf gfo-core:State .
+ph:RequisitionWithdrawn rdfs:subClassOf gfo-core:State .
+ph:RequisitionLate rdfs:subClassOf gfo-core:State .
+
+ph:Requisition ph:hasPhase ph:LodgeRequisition ,
+                                   ph:SettleRequisition .
+
+# ------------------------------------------------------------------
+# Declared participants: which Roles each Process class involves.
+# The manifest's `holder_role` and `params[].role` must name a Role listed
+# here for that ECA's `eca_process`, so the two cannot drift apart.
+#
+# Settling names BOTH Roles: the officer who decides, and the requester whose
+# requisition is decided. The latter is what binds the parameter that selects
+# which of the several open instances the act acts in.
+# ------------------------------------------------------------------
+
+ph:LodgeRequisition ph:hasParticipant ph:RequisitionerRole .
+
+ph:SettleRequisition ph:hasParticipant ph:OfficerRole ,
+                                         ph:RequisitionerRole .

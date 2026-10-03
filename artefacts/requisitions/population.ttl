@@ -1,0 +1,84 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Seed instances for requisitions. Individuals only — the schema lives in
+# ontology.ttl. Loaded into the runtime graph at session start.
+#
+# No requisition is seeded. They are minted by the `lodge` act, which is the
+# point of this law: the consumer has to create several ongoing instances of
+# one Process type before it can be asked to choose between them.
+
+# --- Population (every citizen carries ph:label and ph:age) ---
+
+<https://potato-hamlet.example/ontology/citizen/ada> a ph:Citizen ;
+  ph:label "Ada" ;
+  ph:age 68 .
+
+<https://potato-hamlet.example/ontology/citizen/barnaby> a ph:Citizen ;
+  ph:label "Barnaby" ;
+  ph:age 55 .
+
+<https://potato-hamlet.example/ontology/citizen/cleo> a ph:Citizen ;
+  ph:label "Cleo" ;
+  ph:age 47 .
+
+<https://potato-hamlet.example/ontology/hamlet> a ph:Hamlet ;
+  ph:label "Potato Hamlet" .
+
+<https://potato-hamlet.example/ontology/townhall> a ph:Townhall ;
+  ph:label "The Townhall" .
+
+# --- Clock: the current simulated position ---
+
+<https://potato-hamlet.example/ontology/clock/now> a ph:Clock ;
+  ph:label "Now" ;
+  ph:dayIndex 0 ;
+  ph:atHour 10 .
+
+# --- Calendar. atDate is display-only; the oracle owns day arithmetic.
+# Lodging is a WINDOW (days 0 to 14) because a requisition may be lodged on
+# any day of the cycle; settling is a POINT because it happens at the
+# deadline, or never.
+
+<https://potato-hamlet.example/ontology/calendar/2027/lodging> a ph:CalendarSpan ;
+  ph:label "Lodging window, Jan 2 to Jan 16" ;
+  ph:dayIndex 0 ;
+  ph:marksPhase ph:LodgeRequisition ;
+  gfo-core:temporallyStartedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/opens> ;
+  gfo-core:temporallyFinishedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/deadline> .
+
+<https://potato-hamlet.example/ontology/calendar/2027/opens> a ph:CalendarPoint ;
+  ph:label "Cycle opens, Jan 2" ;
+  ph:atDate "2027-01-02"^^xsd:date ;
+  ph:dayIndex 0 ;
+  ph:atHour 9 .
+
+<https://potato-hamlet.example/ontology/calendar/2027/deadline> a ph:CalendarPoint ;
+  ph:label "Settling deadline, Jan 16" ;
+  ph:atDate "2027-01-16"^^xsd:date ;
+  ph:dayIndex 14 ;
+  ph:atHour 18 ;
+  ph:marksPhase ph:SettleRequisition .
+
+# --- Process situations, so the verdict's `phase` resolves by IRI ---
+
+<https://potato-hamlet.example/ontology/state/open> a ph:RequisitionOpen ;
+  ph:label "Awaiting the Officer's decision" .
+
+<https://potato-hamlet.example/ontology/state/approved> a ph:RequisitionApproved ;
+  ph:label "Purchase authorised" .
+
+<https://potato-hamlet.example/ontology/state/refused> a ph:RequisitionRefused ;
+  ph:label "Purchase not authorised" .
+
+<https://potato-hamlet.example/ontology/state/withdrawn> a ph:RequisitionWithdrawn ;
+  ph:label "Withdrawn by the requester" .
+
+<https://potato-hamlet.example/ontology/state/late> a ph:RequisitionLate ;
+  ph:label "Decided after the deadline" .

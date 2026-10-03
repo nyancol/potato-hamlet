@@ -392,15 +392,24 @@ def check_no_orphan_process(
     procs = process_classes(g)
     _, phases = phase_graph(g)
     named: set[URIRef] = set()
+    minted: set[URIRef] = set()
     if manifest:
         for e in manifest.get("ecas", []):
             named.add(expand(f"ph:{e.get('eca_process', '')}"))
+            # An ECA that mints a new instance declares the class it creates
+            # (law-framework: an ECA whose action mints a new Process instance
+            # SHALL name the Process class it creates). A law whose instances
+            # are all runtime-minted has no seeded individual to show the class
+            # is real, so this declaration is the only thing that keeps it from
+            # reading as an orphan.
+            if e.get("mints"):
+                minted.add(expand(f"ph:{e['mints']}"))
     instantiated = {
         t for t in pg.objects(None, RDF.type) if isinstance(t, URIRef)
     } | {
         t for c in procs for t in pg.subjects(RDF.type, c)
     }
-    live = phases | named | instantiated
+    live = phases | named | minted | instantiated
 
     errors: list[str] = []
     for c in sorted(procs - live, key=str):
@@ -981,6 +990,17 @@ def check_manifest(case: Path, og: Graph | None) -> list[str]:
             errors.append(
                 f"manifest.yaml: eca '{e.get('id')}' declares no holder_role, so no "
                 f"consumer knows which Role the duty attaches to"
+            )
+        minted = e.get("mints")
+        if minted is not None and expand(f"ph:{minted}") not in declared_classes(og):
+            errors.append(
+                f"manifest.yaml: eca '{e.get('id')}' declares it mints "
+                f"'{minted}', which ontology.ttl does not declare as a class"
+            )
+        elif minted is not None and expand(f"ph:{minted}") not in process_classes(og):
+            errors.append(
+                f"manifest.yaml: eca '{e.get('id')}' declares it mints "
+                f"'{minted}', which is not a gfo-core:Process"
             )
         if "params" not in e:
             errors.append(

@@ -1,0 +1,28 @@
+POTATO HAMLET — PURCHASE REQUISITIONS
+
+1. Any citizen of the hamlet may lodge a purchase requisition with the
+   townhall. A requisition names the goods wanted and the sum asked.
+
+2. A citizen may hold no more than one open requisition at a time. Lodging a
+   second while the first is open shall be refused.
+
+3. A requisition may be withdrawn by the citizen who lodged it, at any time
+   before it is decided. Withdrawal closes the requisition; it does not erase
+   it, and it stays in the record as withdrawn.
+
+4. The Requisition Officer shall decide every open requisition on or before
+   the fourteenth day. The Officer shall either
+   approve the requisition or refuse it, and shall record which.
+
+5. An approval authorises the purchase at the sum asked. A refusal does not.
+
+6. A requisition decided after the fourteenth day is late, and the delay is
+   recorded against the Officer.
+
+7. The Requisition Officer is the oldest citizen of the hamlet who is not
+   themselves a requisitioner. If every citizen holds an open requisition the
+   post is vacant, and the duty waits; no other citizen may take it.
+
+8. Requisitions stand independently of one another. One being decided, refused
+   or withdrawn has no bearing on any other, and any number of them may be
+   open at the same time.
