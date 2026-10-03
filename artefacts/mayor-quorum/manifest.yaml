@@ -1,5 +1,5 @@
 case: mayor-quorum
-freeze: sha256:cb5b06154857ac0897bf4377da95ec813ed5fe42848ff7966ec57d8fc308e937
+freeze: sha256:e2e3fd13ff712b831e51767f6914d39fb22e1b96db4232edca4dadeb3cc5c4f2
 ontology: ontology.ttl
 population: population.ttl
 oracle: oracle

@@ -59,6 +59,30 @@ def copy_graph(graph) -> "Graph":
     return g
 
 
+def permuted(wire: dict, k: int) -> dict:
+    """The same triples in a different order.
+
+    `graph` crosses the wire as an unordered list of triples, so an oracle that
+    read position would be right only by accident of how the list happened to
+    be built. Permuting it is the direct test: same triples, different order,
+    so any verdict that changes was reading position.
+    """
+    rows = list(wire["graph"])
+    n = len(rows)
+    if n == 0:
+        return {"graph": rows}
+    # Reversal and rotation are permutations for EVERY n. A stride walk is not:
+    # `rows[(i * 7 + k) % n]` repeats whenever n is a multiple of 7, which
+    # duplicates most rows and drops the rest -- so the oracle sees a truncated
+    # graph and the test appears to prove the oracle order-dependent when the
+    # test was the thing that was wrong.
+    if k == 1:
+        return {"graph": list(reversed(rows))}
+    if k == 2:
+        k = 1
+    return {"graph": rows[k:] + rows[:k]}
+
+
 def without(graph, triple) -> "Graph":
     g = Graph()
     for t in graph:
@@ -170,6 +194,54 @@ def main(argv: list[str]) -> int:
         expect("a GFO-typed subject is accepted", True)
     except UndeclaredSubject as e:
         expect("a GFO-typed subject is accepted", False, str(e))
+
+    # ---- 3.3: no rule depends on list position -------------------------
+    # The wire format is an unordered list of triples. `cyclesOrdered` sorts by
+    # the declared ph:cycleIndex, but picking `getLast?` off that sort is still
+    # a position convention -- it happens to be right only because the law
+    # always creates its successor after closing its predecessor. Permuting the
+    # wire is what distinguishes "reads the declared index" from "reads the
+    # order it was handed".
+    import json as _json
+
+    for label, voters in (("at the seed", 0), ("mid-election", 1), ("after a repeat", 2)):
+        c = OracleClient(case)
+        if voters:
+            for who in ("alice", "bob", "cara"):
+                c.set_time(0)
+                try:
+                    c.apply({"eca": "announce"})
+                except OracleRejected:
+                    pass
+                c.apply({"eca": "nominate", "citizen": CITIZEN + who})
+            c.set_time(9)
+            c.apply({"eca": "prepare"})
+            c.set_time(10, 12)
+            c.apply({"eca": "vote", "voter": CITIZEN + "alice",
+                     "candidate": next(
+                         o for es in c.check()["pending"].values() for e in es
+                         for o in (e.get("choices") or {}).get("candidate", []))})
+            c.set_time(10, 20)
+            c.apply({"eca": "count"})
+            if voters == 2 and any(
+                e["eca"] == "repeat" for es in c.check()["pending"].values() for e in es
+            ):
+                c.apply({"eca": "repeat"})
+        wire = graph_to_wire(c.graph)
+        code, base, _ = c._run("check", wire)
+        expect(f"{label}: check succeeds on the seed order", code == 0, base[:160])
+        baseline = _json.loads(base)
+        for k in (1, 2, 5):
+            code, out, err = c._run("check", permuted(wire, k))
+            if code != 0:
+                expect(f"{label}: check succeeds on a permuted wire (k={k})", False, err[:160])
+                continue
+            if _json.loads(out) != baseline:
+                expect(f"{label}: the verdict ignores wire order (k={k})", False,
+                       "permuting the triples changed the verdict")
+                break
+        else:
+            expect(f"{label}: the verdict is identical under 3 permutations", True)
 
     if fails:
         print(f"\n{len(fails)} FAILURE(S): {fails}")

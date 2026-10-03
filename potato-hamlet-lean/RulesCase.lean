@@ -63,6 +63,12 @@ structure Cycle where
   startHour : Option Nat
   finishDay : Option Nat
   finishHour : Option Nat
+  -- The DECLARED `ph:cycleIndex`, and whether the instance has finished. Both
+  -- are read from the graph rather than inferred from where the instance sits
+  -- in a list: a wire round-trip gives no array ordering, so position carries
+  -- no meaning, and a rule that read it would be right only by accident.
+  idx : Nat
+  finished : Bool
 deriving Repr, DecidableEq
 
 /-- The day an instance began on, defaulting to its current day before it
@@ -299,7 +305,7 @@ instance : FromJson Cycle where
     let outcome ← getOptStr j "outcome"
     return Cycle.mk id day hour candidates ballots registry box
       announced prepared counted proclaimed outcome
-      none none none none
+      none none none none 0 true
 
 instance : FromJson Snapshot where
   fromJson? j := do
@@ -577,8 +583,17 @@ def boolLit (b : Bool) : TripleObj := TripleObj.lit (if b then "true" else "fals
 
 def ageIn (g : Graph) (citizen : String) : Nat := Graph.natOf g citizen (ph "age")
 
+/-- The population, in a canonical order.
+
+    Sorted by IRI because everything downstream observes it: which citizen a
+    missing-ballot witness names, how `absentees` orders a quorum failure's
+    refs, and which of two equally old candidates `oldestId` keeps. Left in
+    wire order those all vary with the order the triples happened to be sent
+    in, and the wire format is an unordered list -- so two round-trips of the
+    same graph would disagree, with nothing in the state having changed. -/
 def citizensOf (g : Graph) : List Citizen :=
-  (Graph.typedOf g (ph "Citizen")).map fun c => Citizen.mk c (ageIn g c)
+  ((Graph.typedOf g (ph "Citizen")).map fun c => Citizen.mk c (ageIn g c)).mergeSort
+    (fun a b => a.id < b.id)
 
 def flagOn (g : Graph) (cyc name : String) : Bool :=
   match g.litOf? cyc (ph name) with
@@ -612,19 +627,29 @@ def votesIn (g : Graph) (cyc : String) : List Vote :=
     | _, _, _ => none
 
 def candidatesIn (g : Graph) (cyc : String) : List String :=
-  (Graph.typedOf g (ph "CandidateRole")).filterMap fun r =>
+  let found := (Graph.typedOf g (ph "CandidateRole")).filterMap fun r =>
     match g.iriOf? r (ph "cycleIndex") with
     | some ci => if ci == cyc then g.iriOf? r (ph "playedBy") else none
     | none => none
+  found.mergeSort (fun a b => a < b)
 
 def registryIn (g : Graph) (cyc : String) : List String :=
-  (Graph.typedOf g (ph "SelfNomination")).filterMap fun n =>
+  let found := (Graph.typedOf g (ph "SelfNomination")).filterMap fun n =>
     match g.iriOf? n (ph "cycleIndex") with
     | some ci => if ci == cyc then g.iriOf? n (ph "hasParticipant") else none
     | none => none
+  found.mergeSort (fun a b => a < b)
 
 def outcomeIn (g : Graph) (cyc : String) : Option String :=
   g.litOf? cyc (ph "outcome")
+
+/-- Has this instance finished? Declared, not positional: a historical instance
+    is one whose `Chronoid` carries a finish bound, so that bound is what makes
+    an instance past rather than where it appears in the graph. -/
+def finishedIn (g : Graph) (cyc : String) : Bool :=
+  match g.iriOf? cyc (ph "hasTime") with
+  | some ch => (g.iriOf? ch "https://w3id.org/gfo-core/temporallyFinishedBy").isSome
+  | none => true
 
 /-- The moment a Chronoid bound denotes, read as (day, hour).
 
@@ -655,6 +680,7 @@ def cycleOf (g : Graph) (cyc : String) : Cycle :=
     (flagOn g cyc "counted") (flagOn g cyc "proclaimed")
     (outcomeIn g cyc)
     none none none none
+    (g.natOf cyc (ph "cycleIndex")) (finishedIn g cyc)
   let withStart :=
     match startedAt g cyc with
     | some (d, h) => { base with startDay := some d, startHour := some h }
@@ -675,16 +701,42 @@ def snapshotOf (g : Graph) : Snapshot :=
     An instance is INITIALISED (awaiting its trigger) when its `ph:Chronoid`
     carries no `temporallyStartedBy`, and ONGOING otherwise. -/
 
-def curIdx (s : Snapshot) : Nat :=
-  match s.cycles.length with
-  | 0 => 0
-  | n + 1 => n
+/-- The current instance: the one that has not finished.
+
+    Chosen by DECLARED lifecycle state -- an instance with no finish bound on
+    its `Chronoid` -- rather than by being the last element. The two coincide
+    only because the law always creates the successor after closing its
+    predecessor; relying on the position would break the moment it did not, and
+    a wire round-trip carries no array order to rely on anyway.
+
+    `idx` is the declared `ph:cycleIndex`, so the per-repeat day arithmetic keys
+    off what the graph says the instance is rather than off its rank.
+-/
+def ongoing (s : Snapshot) : List Cycle :=
+  s.cycles.filter (fun c => !c.finished)
+
+def highestByIdx (cs : List Cycle) : Option Cycle :=
+  cs.foldl (fun best c => match best with
+    | none => some c
+    | some b => if c.idx > b.idx then some c else best) (none : Option Cycle)
 
 def cur (s : Snapshot) : Cycle :=
-  match s.cycles.getLast? with
+  -- Ties are broken by the declared index, never by list position. There should
+  -- never be a tie: a law running two cycles at once is exactly what 5.4 needs
+  -- a second process type for.
+  match highestByIdx (ongoing s) with
   | some c => c
-  | none => Cycle.mk "" 0 0 [] [] [] [] false false false false none
-      none none none none
+  | none =>
+    -- Every instance has finished. Fall back to the highest declared index,
+    -- still not to position, so a fully historical graph reads the same way
+    -- however its triples arrived.
+    match highestByIdx s.cycles with
+    | some c => c
+    | none => Cycle.mk "" 0 0 [] [] [] [] false false false false none
+        none none none none 0 true
+
+def curIdx (s : Snapshot) : Nat :=
+  (cur s).idx
 
 def updateCur (s : Snapshot) (f : Cycle → Cycle) : Snapshot :=
   match s.cycles with
@@ -898,7 +950,7 @@ def voidCycle? (s : Snapshot) : Bool :=
     flags cleared, day set to the next E-day. -/
 def freshCycle (k : Nat) : Cycle :=
   Cycle.mk (cycleIri k) (electionDayK k) 0 [] [] [] [] false false false false none
-    none none none none
+    none none none none k false
 
 /-! Uniform oracle interface. -/
 
@@ -939,6 +991,8 @@ def pendingOf (s : Snapshot) : List PendingEntry :=
 /-- Citizens who did not vote: the individuals a failed quorum is about. The
     counts say how far short it fell; these say who made it short. -/
 def absentees (s : Snapshot) : List String :=
+  -- Sorted because `citizensOf` is, so the witness is stable across round-trips
+  -- rather than following the order the triples arrived in.
   s.citizens.filterMap fun c => if voted? s c.id then none else some c.id
 
 def violationsOf (s : Snapshot) : List Violation :=
