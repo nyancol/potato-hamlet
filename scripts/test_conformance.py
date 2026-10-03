@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from rdflib import OWL, RDF, RDFS, Graph, URIRef  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -58,6 +59,13 @@ def main(argv: list[str]) -> int:
 
     def fresh() -> OracleClient:
         return OracleClient(case)
+
+    def _declared_classes(case_dir: Path) -> set[str]:
+        g = Graph()
+        g.parse(case_dir / "ontology.ttl")
+        return {str(s) for s in g.subjects(RDFS.subClassOf, None)} | {
+            str(s) for s in g.subjects(RDF.type, OWL.Class)
+        }
 
     def entry_choices(entry: dict) -> dict:
         """Choice slots the verdict offers for one pending entry."""
@@ -137,6 +145,83 @@ def main(argv: list[str]) -> int:
         except OracleRejected as e:
             expect(f"{name} rejects", fragment in str(e), str(e))
     expect("rejections leave the graph unchanged", c.subjects() == before, "graph changed")
+
+    # ---- readings: a law's results without a verdict field of their own ----
+    # `wouldWin` named one process's result, so a taxation or requisition law
+    # had nothing to put there and any new result needed a verdict change. A
+    # reading names a law-chosen id, a kind from a closed set, and a value.
+    c = fresh()
+    empty = c.check()["readings"]
+    expect(
+        "a law with no result emits no placeholder reading",
+        empty == [],
+        str(empty),
+    )
+    expect("the verdict no longer carries wouldWin", "wouldWin" not in c.check())
+
+    ballots_exist(c)
+    for _ in range(30):
+        v = c.check()
+        offered = [
+            (citizen, entry)
+            for citizen, entries in v.get("pending", {}).items()
+            for entry in entries
+        ]
+        moved = False
+        for citizen, entry in offered:
+            eca = by_id.get(entry["eca"])
+            if eca is None:
+                continue
+            act = act_from_declaration(eca, {"selected": citizen, **entry_choices(entry)})
+            if act is None:
+                continue
+            try:
+                c.apply(act)
+                moved = True
+                break
+            except (OracleRejected, ValueError):
+                continue
+        if not moved:
+            break
+
+    readings = c.check()["readings"]
+    kinds = {r.get("kind") for r in readings}
+    expect(
+        "every reading names an id, a kind from the closed set, and a value",
+        bool(readings)
+        and all(
+            r.get("id") and r.get("kind") in {"decimal", "ref", "flag"} and "value" in r
+            for r in readings
+        ),
+        str(readings),
+    )
+
+    refs = [r for r in readings if r.get("kind") == "ref"]
+    expect("a ref reading names the ontology class it points at",
+           all(r.get("refClass") for r in refs), str(refs))
+    undeclared = sorted(
+        {r["refClass"] for r in refs
+         if r.get("refClass") not in _declared_classes(case)}
+    )
+    expect("every refClass is a class the ontology declares",
+           not undeclared, str(undeclared))
+
+    # A ref reading resolves: its value is an IRI in the graph, and its label
+    # comes back through the declared class rather than a second source.
+    resolved = []
+    for r in refs:
+        node = URIRef(r["value"])
+        if (node, RDF.type, URIRef(r["refClass"])) in c.graph:
+            label = c.graph.value(node, URIRef("https://potato-hamlet.example/ontology/label"))
+            resolved.append(label is not None)
+    expect("a ref reading resolves to a labelled individual of its refClass",
+           bool(refs) and all(resolved) and len(resolved) == len(refs), str(refs))
+
+    decimals = [r for r in readings if r.get("kind") == "decimal"]
+    expect("a law reporting a number and a law reporting a citizen differ only in "
+           "id, kind, and value",
+           bool(decimals) and bool(refs),
+           f"kinds seen: {sorted(kinds)}")
 
     print(f"\n{'all pass' if not fails else f'{len(fails)} FAILURES: {fails}'}")
     return 1 if fails else 0

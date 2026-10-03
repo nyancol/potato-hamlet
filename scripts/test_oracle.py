@@ -89,7 +89,13 @@ def main(argv: list[str]) -> int:
     c.set_time(10, 20)
     c.apply({"eca": "count"})
     v = c.check()
-    expect(fails, "tie resolves to the older candidate", v["wouldWin"] == B, str(v["wouldWin"]))
+    # The winner is a `ref` reading now, not a verdict field: the reading names
+    # the ontology class so a consumer resolves the label without knowing the law.
+    winner = next((r for r in v["readings"] if r["id"] == "mayor"), None)
+    expect(fails, "tie resolves to the older candidate",
+           winner is not None and winner["value"] == B, str(v["readings"]))
+    expect(fails, "the winner reading names the individual's class",
+           winner is not None and winner.get("refClass") == P + "Citizen", str(winner))
     expect(fails, "proclaim still pending on the authority",
            "proclaim" in ecas_for(v, A), str(v["pending"]))
     expect(fails, "office unfilled until proclaim",

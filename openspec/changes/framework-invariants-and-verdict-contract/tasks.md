@@ -35,7 +35,7 @@
 
 ## 5. Verdict result channel
 
-- [ ] 5.1 Replace `wouldWin` with a generic `readings` list in both rule sets, carrying a law-chosen id, a kind from `decimal`/`ref`/`flag`, and a value, with `ref` naming the ontology class, and verify a law with no result emits no placeholder entry
+- [x] 5.1 Replace `wouldWin` with a generic `readings` list in both rule sets, carrying a law-chosen id, a kind from `decimal`/`ref`/`flag`, and a value, with `ref` naming the ontology class, and verify a law with no result emits no placeholder entry
 - [x] 5.2 Add parameter slots to `pending` in both rule sets carrying the choices available at that instant, and verify a pending vote entry names the candidates selectable by the acting citizen
 - [ ] 5.3 Add the process instance IRI to each `pending` entry in both rule sets, and verify a duty resolves to the instance it belongs to in both the flat and cycle-history shapes
 - [ ] 5.4 Verify a duty on a multi-instance process type takes a parameter sourced from `choices` over the open instances, and that an act naming a chosen instance is accepted while one naming an unknown instance is rejected with a named guard

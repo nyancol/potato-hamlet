@@ -160,11 +160,22 @@ def drive(
         except OracleRejected:
             pass
     c.set_time(10, 12)
-    candidates = sorted(
-        str(s)
-        for s in c.graph.subjects(RDF.type, URIRef(PH + "CandidateRole"))
-    )
+    # Candidates come from the verdict's own choice slots, not from a query
+    # over the graph. The two laws put candidacy in different places --
+    # mayor-2027's flat shape holds it in the hamlet aggregate, quorum's
+    # history shape holds it in the cycle instance -- so any query that names a
+    # context is per-law code, which is the one thing this framework forbids.
+    # Reading the offer is what a consumer actually does.
     for voter in voters:
+        candidates = sorted(
+            {
+                option
+                for entries in c.check().get("pending", {}).values()
+                for entry in entries
+                if entry.get("eca") == "vote"
+                for option in (entry.get("choices") or {}).get("candidate", [])
+            }
+        )
         if not candidates:
             break
         act = {"eca": "vote", "voter": CITIZEN + voter, "candidate": candidates[0]}

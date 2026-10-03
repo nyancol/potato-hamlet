@@ -129,11 +129,62 @@ structure Violation where
   detail : String
 deriving Repr, DecidableEq
 
+/-! Readings: a law's results, reported without a verdict field of their own.
+
+    The verdict once carried `wouldWin`, which is the name of one process's
+    result. A taxation or requisition law has no winner, so the field was
+    meaningless for it and any genuinely new result would have needed a
+    verdict shape change -- the framework-fixed contract was not fixed. A
+    reading instead names a law-chosen id, a `kind` from a closed set, and a
+    value, so a new result is a new entry rather than a new field.
+
+    A law with no result of a given shape emits NO reading for it. Absence is
+    how a consumer learns there is nothing, so there is never a null that
+    could be mistaken for a value. -/
+
+inductive ReadingKind where
+  | decimal | ref | flag
+  deriving Repr, DecidableEq, Inhabited
+
+def ReadingKind.name : ReadingKind → String
+  | .decimal => "decimal"
+  | .ref => "ref"
+  | .flag => "flag"
+
+inductive ReadingValue where
+  | num (n : Nat)
+  | flag (b : Bool)
+  | iri (s : String)
+  deriving Repr, DecidableEq
+
+/-- One result. `refClass` names the ontology class of the individual a `ref`
+    reading points at, so a consumer resolves its label from the graph without
+    knowing which law it is reading. It is present on `ref` readings only. -/
+structure Reading where
+  id : String
+  kind : ReadingKind
+  value : ReadingValue
+  refClass : Option String
+deriving Repr, DecidableEq
+
+instance : ToJson Reading where
+  toJson r :=
+    let base : List (String × Json) :=
+      [ ("id", toJson r.id)
+      , ("kind", Json.str r.kind.name)
+      , ("value", match r.value with
+          | .num n => toJson n
+          | .flag b => toJson b
+          | .iri s => toJson s) ]
+    Json.mkObj (match r.refClass with
+      | some c => base ++ [("refClass", toJson c)]
+      | none => base)
+
 structure VerdictData where
   fired : List String
   pending : List PendingEntry
   violations : List Violation
-  wouldWin : Option String
+  readings : List Reading
   phase : String
 deriving Repr, DecidableEq
 
@@ -244,7 +295,7 @@ instance : ToJson VerdictData where
       ("fired", toJson v.fired),
       ("pending", Json.mkObj (grouped.map (fun kv => (kv.1, Json.arr kv.2.toArray)))),
       ("violations", toJson v.violations),
-      ("wouldWin", match v.wouldWin with | none => Json.null | some w => toJson w),
+      ("readings", Json.arr (v.readings.toArray.map toJson)),
       ("phase", toJson v.phase)]
 
 /-! Law-specific: per-index day arithmetic (announce = E-10, prepare = E-1).
@@ -769,6 +820,26 @@ theorem quorumValid_agrees (s : Snapshot) :
     quorumValid? s = true ↔ QuorumValid s := by
   simp [quorumValid?, QuorumValid]
 
+/-- This law's results, as readings.
+
+    `quorumHeld` is knowable only once the polls have closed and the votes are
+    counted, so before that it is absent rather than false: "not yet determined"
+    and "determined, and it failed" are different facts and a consumer can tell
+    them apart because only one of them is in the list. -/
+def readingsOf (s : Snapshot) : List Reading :=
+  let quorumReading : List Reading :=
+    if (cur s).counted then
+      [ { id := "quorumHeld", kind := .flag
+        , value := .flag (quorumValid? s == true), refClass := none } ]
+    else []
+  match winner? s with
+  | none => quorumReading
+  | some w =>
+    [ { id := "mayor", kind := .ref, value := .iri w
+      , refClass := some (ph "Citizen") }
+    , { id := "mayorVotes", kind := .decimal
+      , value := .num (voteCount s w), refClass := none } ] ++ quorumReading
+
 /-- True when the current cycle failed quorum at polls-close after counting:
     the guard shared by the violation, the repeat pending entry, and apply. -/
 def voidCycle? (s : Snapshot) : Bool :=
@@ -844,7 +915,7 @@ def phaseOf (s : Snapshot) : String :=
 
 def evaluate (s : Snapshot) : VerdictData :=
   { fired := firedOf s, pending := pendingOf s, violations := violationsOf s,
-    wouldWin := winner? s, phase := phaseOf s }
+    readings := readingsOf s, phase := phaseOf s }
 
 /-! Actions as data + enforcing transitions (`apply` enforces, `check` advises).
     Each transition reuses the same `?` guards as `check`, so precondition

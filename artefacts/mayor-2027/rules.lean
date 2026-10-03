@@ -186,11 +186,62 @@ structure Violation where
   detail : String
 deriving Repr, DecidableEq
 
+/-! Readings: a law's results, reported without a verdict field of their own.
+
+    The verdict once carried `wouldWin`, which is the name of one process's
+    result. A taxation or requisition law has no winner, so the field was
+    meaningless for it and any genuinely new result would have needed a
+    verdict shape change -- the framework-fixed contract was not fixed. A
+    reading instead names a law-chosen id, a `kind` from a closed set, and a
+    value, so a new result is a new entry rather than a new field.
+
+    A law with no result of a given shape emits NO reading for it. Absence is
+    how a consumer learns there is nothing, so there is never a null that
+    could be mistaken for a value. -/
+
+inductive ReadingKind where
+  | decimal | ref | flag
+  deriving Repr, DecidableEq, Inhabited
+
+def ReadingKind.name : ReadingKind → String
+  | .decimal => "decimal"
+  | .ref => "ref"
+  | .flag => "flag"
+
+inductive ReadingValue where
+  | num (n : Nat)
+  | flag (b : Bool)
+  | iri (s : String)
+  deriving Repr, DecidableEq
+
+/-- One result. `refClass` names the ontology class of the individual a `ref`
+    reading points at, so a consumer resolves its label from the graph without
+    knowing which law it is reading. It is present on `ref` readings only. -/
+structure Reading where
+  id : String
+  kind : ReadingKind
+  value : ReadingValue
+  refClass : Option String
+deriving Repr, DecidableEq
+
+instance : ToJson Reading where
+  toJson r :=
+    let base : List (String × Json) :=
+      [ ("id", toJson r.id)
+      , ("kind", Json.str r.kind.name)
+      , ("value", match r.value with
+          | .num n => toJson n
+          | .flag b => toJson b
+          | .iri s => toJson s) ]
+    Json.mkObj (match r.refClass with
+      | some c => base ++ [("refClass", toJson c)]
+      | none => base)
+
 structure VerdictData where
   fired : List String
   pending : List PendingEntry
   violations : List Violation
-  wouldWin : Option String
+  readings : List Reading
   phase : String
 deriving Repr, DecidableEq
 
@@ -286,7 +337,7 @@ instance : ToJson VerdictData where
       ("fired", toJson v.fired),
       ("pending", Json.mkObj (grouped.map (fun kv => (kv.1, Json.arr kv.2.toArray)))),
       ("violations", toJson v.violations),
-      ("wouldWin", match v.wouldWin with | none => Json.null | some w => toJson w),
+      ("readings", Json.arr (v.readings.toArray.map toJson)),
       ("phase", toJson v.phase)]
 
 /-! Law-specific: named day arithmetic (announce = E-10, prepare = E-1). -/
@@ -526,6 +577,19 @@ def oldestId : Snapshot → List String → Option String
 def winner? (s : Snapshot) : Option String :=
   oldestId s (winners s)
 
+/-- This law's results, as readings.
+
+    Before anyone has won there is no result to report, so the list is empty
+    rather than carrying a `mayor` entry with nothing in it. -/
+def readingsOf (s : Snapshot) : List Reading :=
+  match winner? s with
+  | none => []
+  | some w =>
+    [ { id := "mayor", kind := .ref, value := .iri w
+      , refClass := some (ph "Citizen") }
+    , { id := "mayorVotes", kind := .decimal
+      , value := .num (voteCount s w), refClass := none } ]
+
 /-- Winner agreement is stated as Bool-equality (rfl): a full argmax-plus-oldest
     correctness proof (winner ∈ candidates, maximal count, oldest on ties) is
     deferred. The counting/oldest building blocks above are the checkable part. -/
@@ -598,7 +662,7 @@ def phaseOf (s : Snapshot) : String :=
 
 def evaluate (s : Snapshot) : VerdictData :=
   { fired := firedOf s, pending := pendingOf s, violations := violationsOf s,
-    wouldWin := winner? s, phase := phaseOf s }
+    readings := readingsOf s, phase := phaseOf s }
 
 /-! Actions as data + enforcing transitions (`apply` enforces, `check` advises).
     Each transition reuses the same `?` guards as `check`, so precondition
