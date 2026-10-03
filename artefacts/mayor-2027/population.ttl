@@ -77,7 +77,7 @@
   gfo-core:temporallyStartedBy
     <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
   gfo-core:temporallyFinishedBy
-    <https://potato-hamlet.example/ontology/calendar/2027/election> .
+    <https://potato-hamlet.example/ontology/calendar/2027/prepare> .
 
 # --- Process situations: the verdict's `phase` resolves by IRI ---
 

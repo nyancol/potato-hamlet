@@ -78,7 +78,7 @@
   gfo-core:temporallyStartedBy
     <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
   gfo-core:temporallyFinishedBy
-    <https://potato-hamlet.example/ontology/calendar/2027/election> .
+    <https://potato-hamlet.example/ontology/calendar/2027/prepare> .
 
 # --- The scheduled election, not yet begun (no dayIndex of its own: it is
 # initialised, and the oracle starts it when the clock reaches announce). ---
