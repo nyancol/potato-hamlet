@@ -26,11 +26,21 @@
   ph:label "Cleo" ;
   ph:age 47 .
 
+<https://potato-hamlet.example/ontology/citizen/dara> a ph:Citizen ;
+  ph:label "Dara" ;
+  ph:age 31 .
+
 <https://potato-hamlet.example/ontology/hamlet> a ph:Hamlet ;
   ph:label "Potato Hamlet" .
 
 <https://potato-hamlet.example/ontology/townhall> a ph:Townhall ;
   ph:label "The Townhall" .
+
+# --- The standing schedule: what a requisition is for, and at what price ---
+
+<https://potato-hamlet.example/ontology/goods/seed> a ph:Goods ;
+  ph:label "Spring seed" ;
+  ph:sum 12 .
 
 # --- Clock: the current simulated position ---
 
@@ -93,3 +103,6 @@
 
 <https://potato-hamlet.example/ontology/state/late> a ph:RequisitionLate ;
   ph:label "Decided after the deadline" .
+
+<https://potato-hamlet.example/ontology/state/closed> a ph:WindowClosed ;
+  ph:label "Nothing left to decide" .

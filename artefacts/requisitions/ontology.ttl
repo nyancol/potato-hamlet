@@ -160,6 +160,7 @@ ph:RequisitionApproved rdfs:subClassOf gfo-core:State .
 ph:RequisitionRefused rdfs:subClassOf gfo-core:State .
 ph:RequisitionWithdrawn rdfs:subClassOf gfo-core:State .
 ph:RequisitionLate rdfs:subClassOf gfo-core:State .
+ph:WindowClosed rdfs:subClassOf gfo-core:State .
 
 # Lodging and consideration are windows, so both are marked by the same
 # CalendarSpan. Withdrawal is available throughout the window, so it shares

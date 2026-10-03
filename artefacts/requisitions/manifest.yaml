@@ -40,6 +40,9 @@ ecas:
   - name: requisition
     role: RequisitionerRole
     source: choices
+  - name: decision
+    role: OfficerRole
+    source: choices
   - name: officer
     role: OfficerRole
     source: selected

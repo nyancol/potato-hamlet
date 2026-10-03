@@ -1,7 +1,8 @@
 POTATO HAMLET — PURCHASE REQUISITIONS
 
 1. Any citizen of the hamlet may lodge a purchase requisition with the
-   townhall. A requisition names the goods wanted and the sum asked.
+   townhall. The town's standing schedule fixes the goods and the sum, so a
+   requisition is always for the standing item at the standing price.
 
 2. A citizen may hold no more than one open requisition at a time. Lodging a
    second while the first is open shall be refused.
