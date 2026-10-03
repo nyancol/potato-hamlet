@@ -74,7 +74,11 @@
 <https://potato-hamlet.example/ontology/calendar/2027/nomination> a ph:CalendarSpan ;
   ph:label "Nomination window, Jan 2 to Jan 11" ;
   ph:dayIndex 0 ;
-  ph:marksPhase ph:SelfNomination .
+  ph:marksPhase ph:SelfNomination ;
+  gfo-core:temporallyStartedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
+  gfo-core:temporallyFinishedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/election> .
 
 # --- The scheduled election, not yet begun (no dayIndex of its own: it is
 # initialised, and the oracle starts it when the clock reaches announce). ---
@@ -129,6 +133,10 @@
   ph:label "Repeat election gap" ;
   ph:gapDays 30 ;
   ph:marksPhase ph:ScheduleRepeatElection .
+# No ph:dayIndex and no bounds, because there is nothing fixed to bound: the
+# gap is measured from the cycle's own runtime-minted finish bound, and each
+# repeat's successor lands on a different day. A CalendarPoint named here
+# would be a lie for every repeat after the first.
 
 # --- A permitted causal dependency. ph:causedBy takes the AFFECTED thing as
 # subject, so this says "this election is (potentially) caused by PollsClosed"

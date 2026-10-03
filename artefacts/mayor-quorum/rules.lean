@@ -253,6 +253,65 @@ instance : ToJson VerdictData where
 def baseElectionDay : Nat := 10
 def repeatGap : Nat := 30
 def electionDayK (k : Nat) : Nat := baseElectionDay + repeatGap * k
+/-! Calendar dates, computed only here.
+
+    `ph:atDate` is display-only -- the oracle owns day arithmetic and the
+    driver never computes a date. A minted calendar point therefore carries
+    the same declared properties as a seeded one, which means this has to
+    exist at all: a repeat lands on a day the frozen base calendar cannot
+    contain, and its date has to come from somewhere.
+
+    Day 0 of the base calendar is EPOCH_Y/EPOCH_M/EPOCH_D; every other day is
+    EPOCH advanced by that many real days, leap years included. -/
+
+def isLeapYear (y : Nat) : Bool :=
+  (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+
+def daysInMonth (y m : Nat) : Nat :=
+  match m with
+  | 1 | 3 | 5 | 7 | 8 | 10 | 12 => 31
+  | 4 | 6 | 9 | 11 => 30
+  | 2 => if isLeapYear y then 29 else 28
+  | _ => 0
+
+/-- Advance a civil date by `n` days. -/
+def addDays (y m d n : Nat) : Nat × Nat × Nat :=
+  go y m d n
+where
+  go (y m d : Nat) : Nat → Nat × Nat × Nat
+    | 0 => (y, m, d)
+    | n + 1 =>
+      if d < daysInMonth y m then go y m (d + 1) n
+      else if m < 12 then go y (m + 1) 1 n
+      else go (y + 1) 1 1 n
+
+def epochYear : Nat := 2027
+def epochMonth : Nat := 1
+def epochDay : Nat := 2
+
+def dateOfDayIndex (day : Nat) : Nat × Nat × Nat :=
+  addDays epochYear epochMonth epochDay day
+
+def monthName (m : Nat) : String :=
+  match m with
+  | 1 => "Jan" | 2 => "Feb" | 3 => "Mar" | 4 => "Apr" | 5 => "May" | 6 => "Jun"
+  | 7 => "Jul" | 8 => "Aug" | 9 => "Sep" | 10 => "Oct" | 11 => "Nov" | 12 => "Dec"
+  | _ => "?"
+
+def pad2 (n : Nat) : String :=
+  let s := toString n
+  if n < 10 then "0" ++ s else s
+
+/-- `ph:atDate` for a day index, as an xsd:date literal body. -/
+def atDateOf (day : Nat) : String :=
+  let (y, m, d) := dateOfDayIndex day
+  s!"{y}-{pad2 m}-{pad2 d}"
+
+/-- Display suffix for a day index, e.g. `Feb 21`. -/
+def dateLabelOf (day : Nat) : String :=
+  let (y, m, d) := dateOfDayIndex day
+  s!"{monthName m} {d}, {y}"
+
 def announceK (k : Nat) : Nat := electionDayK k - 10
 def prepareK (k : Nat) : Nat := electionDayK k - 1
 def pollOpenHour : Nat := 9
@@ -966,6 +1025,75 @@ def ensureCycle (g : Graph) (k : Nat) (c : Cycle) : Graph :=
     else g1
   withBounds
 
+/-- Mint one calendar point for a repeat's election window.
+
+    A minted point carries the SAME declared properties as a seeded one --
+    `ph:CalendarPoint`, `ph:label`, `ph:atDate`, `ph:dayIndex`, `ph:atHour`
+    where the moment has an hour, `ph:marksPhase` -- so a consumer reads a
+    repeat's schedule with the same queries it reads the base calendar with,
+    and cannot tell the two apart.
+
+    Single-valued properties go through `setOne`, so re-minting on every apply
+    is idempotent. `ph:marksPhase` is appended instead, because a moment can
+    mark more than one phase and `setOne` would drop the earlier ones; a
+    repeated triple is a no-op in a set-valued graph, so appending is safe
+    where set-one would not be. -/
+def mintCalendarPoint (g : Graph) (name label : String) (day : Nat)
+    (hour? : Option Nat) (phases : List String) : Graph :=
+  let s := ph ("calendar/" ++ name)
+  let g1 := Graph.setOne g s rdfType (.iri (ph "CalendarPoint"))
+  let g2 := Graph.setOne g1 s (ph "label") (TripleObj.lit label "string")
+  let g3 := Graph.setOne g2 s (ph "atDate") (TripleObj.lit (atDateOf day) "date")
+  let g4 := Graph.setOne g3 s (ph "dayIndex") (TripleObj.lit (toString day) "integer")
+  let g5 := match hour? with
+    | some h => Graph.setOne g4 s (ph "atHour") (TripleObj.lit (toString h) "integer")
+    | none => g4
+  let marking (p : String) : Triple :=
+    { subject := s, predicate := ph "marksPhase", object := .iri (ph p) }
+  phases.foldl (fun acc p => acc ++ [marking p]) g5
+
+/-- Mint the whole calendar for repeat cycle `k`.
+
+    The base calendar is frozen and shared, so a repeat -- which lands at
+    E-day 10 + 30k and therefore on a day the base calendar cannot name -- gets
+    its own, minted at the moment the repeat is scheduled. The nomination
+    window is a `ph:CalendarSpan` bounded by the minted points, so the repeat's
+    announce date resolves through a span rather than through a table the
+    consumer would have to know the shape of. -/
+def ensureMintedCalendar (g : Graph) (k : Nat) : Graph :=
+  if k == 0 then g
+  else
+    let tag := "repeat-" ++ toString k
+    let ek := electionDayK k
+    let ak := announceK k
+    let pk := prepareK k
+    let announce := ph ("calendar/" ++ tag ++ "/announce")
+    let window := ph ("calendar/" ++ tag ++ "/window")
+    let g0 := mintCalendarPoint g (tag ++ "/announce")
+      s!"Announce (repeat {k}), {dateLabelOf ak}" ak (some pollOpenHour) ["AnnounceElection"]
+    let g1 := mintCalendarPoint g0 (tag ++ "/prepare")
+      s!"Prepare (repeat {k}), {dateLabelOf pk}" pk (some pollOpenHour) ["CreateBallots"]
+    let g2 := mintCalendarPoint g1 (tag ++ "/election")
+      s!"Election (repeat {k}), {dateLabelOf ek}" ek (some pollOpenHour) ["CastVote"]
+    let withPoints := mintCalendarPoint g2 (tag ++ "/polls-close")
+      s!"Polls close (repeat {k}), {dateLabelOf ek}" ek (some pollCloseHour)
+      ["CountVotes", "ProclaimMayor"]
+    let s1 := Graph.setOne withPoints window rdfType (.iri (ph "CalendarSpan"))
+    let s2 := Graph.setOne s1 window (ph "label")
+      (TripleObj.lit s!"Nomination window, {dateLabelOf ak} to {dateLabelOf ek}" "string")
+    let s3 := Graph.setOne s2 window (ph "dayIndex")
+      (TripleObj.lit (toString ak) "integer")
+    let s4 := Graph.setOne s3 window (ph "gapDays")
+      (TripleObj.lit (toString (ek - ak)) "integer")
+    s4 ++ [ { subject := window, predicate := ph "marksPhase"
+            , object := .iri (ph "SelfNomination") }
+          , { subject := window
+            , predicate := "https://w3id.org/gfo-core/temporallyStartedBy"
+            , object := .iri announce }
+          , { subject := window
+            , predicate := "https://w3id.org/gfo-core/temporallyFinishedBy"
+            , object := .iri (ph ("calendar/" ++ tag ++ "/election")) } ]
+
 /-- Additive occurrence materialisation for one election instance. -/
 def ensureOccurrences (g : Graph) (c : Cycle) : Graph :=
   let k := Graph.natOf g c.id (ph "cycleIndex")
@@ -1016,7 +1144,10 @@ def writeBack (g : Graph) (s : Snapshot) : Graph :=
   let base := g.setOne iriClock (ph "atHour")
     (.lit (toString (cur { s with cycles := s.cycles }).hour) "integer")
   let flagged := (withIndex s.cycles).foldl (fun acc (k, c) => ensureCycle acc k c) base
-  let withOcc := (withIndex s.cycles).foldl (fun acc (_, c) => ensureOccurrences acc c) flagged
+  -- Repeats mint their own calendar: the frozen base cannot name their days.
+  let withCal := (withIndex s.cycles).foldl
+    (fun acc (k, _) => ensureMintedCalendar acc k) flagged
+  let withOcc := (withIndex s.cycles).foldl (fun acc (_, c) => ensureOccurrences acc c) withCal
   let mayorRole := iriRole "mayor" ++ "#MayorRole"
   match s.mayorId with
   | none => withOcc

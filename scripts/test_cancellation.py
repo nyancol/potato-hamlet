@@ -334,6 +334,100 @@ def finish_graph(case: Path, day: int, hour: int) -> tuple[OracleClient, str]:
     return c, c.cycles()[0]
 
 
+def check_minted_calendar(case: Path) -> None:
+    """A repeat mints its own calendar, dates computed only by Lean (3.5).
+
+    The base calendar is frozen and shared, so a repeat lands on a day the
+    base calendar cannot name. The law therefore mints CalendarPoint and
+    CalendarSpan individuals during `apply`, carrying the same declared
+    properties as the seeded ones -- a consumer reads a repeat's schedule
+    with the same queries it reads the base calendar with, and cannot tell
+    them apart.
+    """
+    c = drive(case, ["alice"])
+    minted = sorted(s for s in c.subjects() if "/calendar/repeat-1/" in s)
+    expect(
+        "quorum 3.5: the repeat minted its own calendar",
+        len(minted) >= 5,
+        f"only {len(minted)} minted: {[s.rsplit('/', 1)[-1] for s in minted]}",
+    )
+    if not minted:
+        return
+
+    by_name = {s.rsplit("/", 1)[-1]: s for s in minted}
+    for want in ("announce", "prepare", "election", "polls-close", "window"):
+        expect(
+            f"quorum 3.5: the repeat's calendar has a {want}",
+            want in by_name,
+            f"got {sorted(by_name)}",
+        )
+
+    def day_of(name: str) -> int | None:
+        s = by_name.get(name)
+        if s is None:
+            return None
+        v = c.graph.value(URIRef(s), URIRef(PH + "dayIndex"))
+        return int(str(v)) if v is not None else None
+
+    def hour_of(name: str) -> int | None:
+        s = by_name.get(name)
+        if s is None:
+            return None
+        v = c.graph.value(URIRef(s), URIRef(PH + "atHour"))
+        return int(str(v)) if v is not None else None
+
+    # The repeat index arithmetic the spec fixes: E(0)=10, E(1)=40,
+    # announce at E-10, prepare at E-1, polls 9am-7pm on E-day.
+    expect("quorum 3.5: repeat 1 announces on day 30", day_of("announce") == 30,
+           f"got {day_of('announce')}")
+    expect("quorum 3.5: repeat 1 prepares on day 39", day_of("prepare") == 39,
+           f"got {day_of('prepare')}")
+    expect("quorum 3.5: repeat 1 elects on day 40", day_of("election") == 40,
+           f"got {day_of('election')}")
+    expect("quorum 3.5: repeat 1 closes its polls at 19:00", hour_of("polls-close") == 19,
+           f"got {hour_of('polls-close')}")
+
+    # A minted point carries the same declared properties as a seeded one.
+    seeded = c.graph.value(
+        URIRef(PH + "calendar/2027/election"), URIRef(RDF.type)
+    )
+    minted_type = c.graph.value(
+        URIRef(by_name["election"]), URIRef(RDF.type)
+    )
+    expect(
+        "quorum 3.5: a minted point is typed like a seeded one",
+        str(minted_type) == str(seeded),
+        f"seeded {seeded}, minted {minted_type}",
+    )
+    for prop in ("label", "atDate", "dayIndex", "marksPhase"):
+        expect(
+            f"quorum 3.5: a minted point carries ph:{prop}",
+            list(c.graph.objects(URIRef(by_name["election"]), URIRef(PH + prop))) != [],
+        )
+
+    # The date is Lean's: it must agree with the day index, not merely exist.
+    at_date = str(c.graph.value(URIRef(by_name["election"]), URIRef(PH + "atDate")))
+    expect(
+        "quorum 3.5: the minted atDate agrees with the minted dayIndex",
+        at_date == "2027-02-11" and day_of("election") == 40,
+        f"day {day_of('election')} carried atDate {at_date}",
+    )
+
+    # The nomination window is a span bounded by the minted points, so the
+    # announce date resolves through the span rather than a table.
+    window = by_name.get("window")
+    start = c.graph.value(URIRef(window), URIRef(GFO + "temporallyStartedBy"))
+    finish = c.graph.value(URIRef(window), URIRef(GFO + "temporallyFinishedBy"))
+    expect(
+        "quorum 3.5: the repeat's window span is bounded by its minted points",
+        start is not None and finish is not None
+        and str(start) == by_name.get("announce")
+        and str(finish) == by_name.get("election"),
+        f"start={start}, finish={finish}",
+    )
+    print(f"    repeat 1 minted {sorted(by_name)}")
+
+
 def check_finish_bound(case: Path) -> None:
     """The finish bound lands on the Chronoid, in vocabulary already declared."""
     allowed = declared_predicates(case)
@@ -423,6 +517,8 @@ def main(argv: list[str]) -> int:
     print()
     if (case / "population.ttl").read_text().count("ScheduleRepeatElection"):
         check_void_retains_individuals(case)
+        print()
+        check_minted_calendar(case)
         print()
         check_finish_bound(case)
 

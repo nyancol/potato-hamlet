@@ -1,5 +1,6 @@
 @prefix ph: <https://potato-hamlet.example/ontology/> .
 @prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -72,7 +73,11 @@
 <https://potato-hamlet.example/ontology/calendar/2027/nomination> a ph:CalendarSpan ;
   ph:label "Nomination window, Jan 2 to Jan 11" ;
   ph:dayIndex 0 ;
-  ph:marksPhase ph:SelfNomination .
+  ph:marksPhase ph:SelfNomination ;
+  gfo-core:temporallyStartedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
+  gfo-core:temporallyFinishedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/election> .
 
 # --- Process situations: the verdict's `phase` resolves by IRI ---
 
