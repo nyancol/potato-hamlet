@@ -117,6 +117,46 @@ def advance(client, case: Path, rounds: int = 3) -> list[dict]:
     return applied
 
 
+def apply_declared(client, case: Path, eca_id: str, times: int) -> list[dict]:
+    """Apply one DECLARED ECA `times`, built from the manifest.
+
+    Which ECA creates an instance is not hardcoded: it is the one carrying
+    `mints`. And a greedy walk is not always what a test wants -- a law where an
+    instance can be created and withdrawn alternately will oscillate forever
+    under `advance`, leaving nothing open to choose between.
+    """
+    from potato_hamlet.oracle import OracleRejected
+
+    by_id = manifest_of(case)
+    eca = by_id.get(eca_id)
+    if eca is None:
+        return []
+    applied: list[dict] = []
+    for _ in range(times):
+        moved = False
+        for act in pending_acts(client, by_id):
+            if act["eca"] != eca_id:
+                continue
+            try:
+                client.apply(act)
+                applied.append(act)
+                moved = True
+            except OracleRejected:
+                continue
+            break
+        if not moved:
+            break
+    return applied
+
+
+def minting_eca(case: Path) -> str | None:
+    """The ECA that declares it creates a Process instance, if there is one."""
+    for eid, e in manifest_of(case).items():
+        if e.get("mints"):
+            return eid
+    return None
+
+
 def all_pending(client) -> list[dict]:
     """Every pending entry, flattened, whatever its shape."""
     return [e for es in (client.check().get("pending") or {}).values() for e in es]

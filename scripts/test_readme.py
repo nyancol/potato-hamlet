@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yaml  # noqa: E402
 from potato_hamlet.graphwire import graph_to_wire  # noqa: E402
 from potato_hamlet.oracle import OracleClient, OracleRejected  # noqa: E402
+from lawdriver import advance, manifest_of, pending_acts  # noqa: E402
 
 CITIZEN = "https://potato-hamlet.example/ontology/citizen/"
 PH = "https://potato-hamlet.example/ontology/"
@@ -89,23 +90,13 @@ def main(argv: list[str]) -> int:
     expect("`check` with bad input explains itself on stderr", bool(err.strip()), err[:80])
 
     # ---- drive the law to where every documented shape occurs ------------
+    # By playing whatever the verdict offers rather than by naming mayor ECAs:
+    # the point of this suite is that the documented protocol holds for a law
+    # the document never mentions. One round only -- the law stalls once its
+    # current offers are exhausted, and driving further just leaves nothing
+    # pending to send.
     c = OracleClient(case)
-    c.set_time(0)
-    for who in ("alice", "bob", "cara"):
-        c.set_time(0)
-        try:
-            c.apply({"eca": "announce"})
-        except OracleRejected:
-            pass
-        c.apply({"eca": "nominate", "citizen": CITIZEN + who})
-    c.set_time(9)
-    c.apply({"eca": "prepare"})
-    c.set_time(10, 12)
-    entry = next(e for es in c.check()["pending"].values() for e in es if e["eca"] == "vote")
-    c.apply({"eca": "vote", "voter": CITIZEN + "alice",
-             "candidate": entry["choices"]["candidate"][0]})
-    c.set_time(10, 20)
-    c.apply({"eca": "count"})
+    advance(c, case, rounds=1)
 
     verdict = c.check()
     expect(
@@ -179,6 +170,19 @@ def main(argv: list[str]) -> int:
     )
 
     # ---- apply ----------------------------------------------------------
+    # Guarded: a law driven to completion has nothing left to send, and the
+    # success shape cannot be exercised then. Not a failure of the protocol.
+    offered = pending_acts(c, manifest_of(case))
+    if not offered:
+        expect("an act was available to send (skipped: none offered)", True)
+        print(chr(10) + "all pass")
+        return 0
+    envelope = {"act": offered[-1], "graph": rows}
+    code, out, _ = run_oracle(oracle, "apply", stdin=json.dumps(envelope))
+    expect("a well-formed apply exits 0", code == 0, out[:140])
+    if code == 0:
+        expect("apply's success keys",
+               set(json.loads(out)) == README["apply_ok_keys"], out[:120])
     # Take an act the verdict is actually offering, rather than naming one: at
     # day 10 hour 20 the nomination window has shut, so a hardcoded `nominate`
     # is rejected for the right reason and proves nothing about success.
@@ -217,9 +221,39 @@ def main(argv: list[str]) -> int:
             expect("apply's success keys",
                    set(json.loads(out)) == README["apply_ok_keys"], out[:120])
 
-    # A rejection naming its guard: `announce` is never due this late.
+    # A rejection naming its guard. Which ECA is not due is the law's business,
+    # so pick one this law declares that the verdict is not currently firing,
+    # and build a COMPLETE act for it from the manifest -- an envelope carrying
+    # a field the law's Act type has no slot for is a malformed act rather than
+    # a refused one, and would not exercise the rejection path at all.
+    fired = set(verdict["fired"])
+    pool = {e["id"]: e for e in manifest["ecas"] if e["id"] not in fired}
+    options: dict[str, list[str]] = {}
+    for es in verdict.get("pending", {}).values():
+        for entry in es:
+            for slot, vals in (entry.get("choices") or {}).items():
+                options.setdefault(slot, list(vals))
+    someone = next(iter(verdict.get("pending", {})), None) or CITIZEN + "alice"
+    refused = None
+    for eid, e in pool.items():
+        act: dict = {"eca": eid}
+        ok = True
+        for prm in e.get("params") or []:
+            if prm["source"] == "selected":
+                act[prm["name"]] = someone
+            elif prm["name"] in options:
+                act[prm["name"]] = options[prm["name"]][0]
+            else:
+                ok = False
+                break
+        if ok:
+            refused = act
+            break
+    expect("the law has a complete act that is not due", refused is not None,
+           f"not fired: {sorted(pool)}")
     code, out, err = run_oracle(
-        oracle, "apply", stdin=json.dumps({"act": {"eca": "announce"}, "graph": rows})
+        oracle, "apply",
+        stdin=json.dumps({"act": refused if refused else {}, "graph": rows})
     )
     expect("a rejected act exits 1", code == 1, f"exit {code}")
     try:

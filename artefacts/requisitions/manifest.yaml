@@ -8,9 +8,6 @@ time:
 ecas:
 - id: lodge
   eca_process: LodgeRequisition
-  # This act creates a new ongoing instance of ph:Requisition. Declared, so
-  # starting a process is distinguishable in the artefacts from any other act,
-  # and so a class whose every instance is minted is still visibly reachable.
   mints: Requisition
   holder_role: RequisitionerRole
   params:
@@ -34,9 +31,6 @@ ecas:
   eca_process: SettleRequisition
   holder_role: OfficerRole
   params:
-  # The instance this duty acts in. Several requisitions are open at once, so
-  # the consumer presents the open instances as a choice and the act names the
-  # one selected; a name the law does not recognise is refused by a guard.
   - name: requisition
     role: RequisitionerRole
     source: choices
@@ -49,19 +43,17 @@ ecas:
   label: Settle a requisition
   message: '{officer} must approve or refuse {requisition} by the deadline'
   modality: must
-
-# Every reading the oracle can emit, with the class a `ref` reading resolves
-# through and the template a consumer renders it with.
 readings:
 - id: openRequisitions
   class: null
   label: Requisitions awaiting decision
-  template: "{value} open"
+  template: '{value} open'
 - id: approvedTotal
   class: null
   label: Approved purchases
-  template: "{value} approved"
+  template: '{value} approved'
 - id: lastSettled
   class: Requisition
   label: Last settled requisition
-  template: "{label}"
+  template: '{label}'
+freeze: sha256:cf9b99280891be5bd4299b556209f07b8015d160346ccee7ff1c39dff27e3100

@@ -220,7 +220,16 @@ structure Req where
   decidedBy : Option String
 deriving Repr, DecidableEq
 
-def reqIri (citizen : String) : String := ph "requisition/" ++ shortId citizen
+/-- Deterministic from (case, citizen, occurrence).
+
+    NOT from the citizen alone: a citizen may withdraw a requisition and lodge
+    another, and the two are separate occurrences with separate outcomes. Keying
+    on the citizen alone made the second one collide with the first, so
+    withdrawing and re-lodging silently overwrote a finished requisition -- the
+    graph gained a start bound on an instance that already had a finish bound,
+    and no withdrawal was ever recorded. -/
+def reqIri (citizen : String) (k : Nat) : String :=
+  ph ("requisition/" ++ shortId citizen ++ "-" ++ toString k)
 def chronoIri (req : String) : String := ph "chronoid/requisition/" ++ shortId req
 
 def Req.startDayOf (r : Req) : Nat :=
@@ -638,7 +647,8 @@ def firedOf (s : Snapshot) : List String :=
 def pendingOf (s : Snapshot) : List PendingEntry :=
   let citizens : List PendingEntry := s.citizens.flatMap (fun c =>
     (if windowOpen? s.day && !(holdsOpenIn s c.id) && lodgeDue? s c.id
-      then [{ citizen := c.id, eca := "lodge", process := reqIri c.id, choices := [] }]
+      then [{ citizen := c.id, eca := "lodge", choices := []
+              , process := reqIri c.id ((s.reqs.filter (fun r => r.requester == c.id)).length) }]
       else []) ++
     (match openOfIn s c.id with
       | some r => [{ citizen := c.id, eca := "withdraw", process := r.id, choices := [] }]
@@ -712,8 +722,10 @@ instance : FromJson Act where
     which is why `mints: Requisition` is declared in the manifest. -/
 def applyLodge (s : Snapshot) (citizen : String) : Except String Snapshot :=
   if lodgeDue? s citizen then
+    -- The occurrence index: how many requisitions this citizen has already had.
+    let k := (s.reqs.filter (fun r => r.requester == citizen)).length
     let base : Req :=
-      { id := reqIri citizen
+      { id := reqIri citizen k
       , day := s.day
       , hour := s.hour
       , requester := citizen
