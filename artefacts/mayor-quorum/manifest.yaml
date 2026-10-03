@@ -69,3 +69,23 @@ ecas:
   label: Schedule repeat election
   message: '{holder} must schedule a repeat election 30 days later with a fresh registry'
   modality: must
+
+# Every reading the oracle can emit, with the class a `ref` reading resolves
+# through and the template a consumer renders it with. The gate refuses a set
+# where the oracle emits a reading this block does not declare, so a new
+# result cannot appear in the verdict without also being displayable.
+readings:
+- id: mayor
+  class: Citizen
+  label: Mayor
+  template: "{label}"
+- id: mayorVotes
+  class: null
+  label: Votes for the mayor
+  template: "{value} votes"
+# Absent until this cycle is counted: "not yet determined" and "determined,
+# and it failed" are different facts, and only one of them is in the verdict.
+- id: quorumHeld
+  class: null
+  label: Quorum held
+  template: "quorum {value}"

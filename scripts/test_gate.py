@@ -470,6 +470,67 @@ MUTATIONS: list[Mutation] = [
         expect_text="`oracle list` does not serve it",
         needs_oracle=True,
     ),
+    # ---- 5.6 readings declared in the manifest -------------------------
+    Mutation(
+        id="5.6-reading-undeclared",
+        task="5.6",
+        edits={
+            "manifest.yaml": [
+                (
+                    r"^- id: mayor$\n  class: Citizen$\n  label: Mayor$\n  template: \"\{label\}\"$\n",
+                    "",
+                )
+            ]
+        },
+        expect_check="readings declared",
+        expect_text="emits reading 'mayor' but the readings block does not declare it",
+        needs_oracle=True,
+    ),
+    Mutation(
+        id="5.6-no-readings-block",
+        task="5.6",
+        edits={
+            "manifest.yaml": [
+                (r"^readings:\n(?:  .*\n|    .*\n|- .*\n|  - .*\n)*", ""),
+            ]
+        },
+        expect_check="readings declared",
+        expect_text="declares no readings block",
+        needs_oracle=True,
+    ),
+    Mutation(
+        id="5.6-reading-class-undeclared",
+        task="5.6",
+        edits={
+            "manifest.yaml": [(r"^  class: Citizen$", "  class: WoodcutterRole")]
+        },
+        expect_check="readings declared",
+        expect_text="names class 'WoodcutterRole', which ontology.ttl does not declare",
+        needs_oracle=True,
+    ),
+    Mutation(
+        id="5.6-ref-resolves-through-wrong-class",
+        task="5.6",
+        edits={
+            # A declared class that exists but is not the one the oracle
+            # resolves through: the consumer would look up the label under the
+            # wrong concept.
+            "manifest.yaml": [(r"^  class: Citizen$", "  class: VoterRole")]
+        },
+        expect_check="readings declared",
+        expect_text="declares class 'VoterRole' but the oracle resolves it through",
+        needs_oracle=True,
+    ),
+    Mutation(
+        id="5.6-reading-without-template",
+        task="5.6",
+        edits={
+            "manifest.yaml": [(r"^  template: \"\{value\} votes\"$", '  template: ""')]
+        },
+        expect_check="readings declared",
+        expect_text="declares no template",
+        needs_oracle=True,
+    ),
     Mutation(
         id="6.9-eca-missing-from-manifest",
         task="6.9",

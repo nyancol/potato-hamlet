@@ -717,6 +717,149 @@ def act_from_declaration(eca: dict, entry: dict, citizen: str) -> dict | None:
     return act
 
 
+def play_forward(client, by_id: dict, limit: int = 40) -> tuple[list[dict], list[str]]:
+    """Take whatever the verdict offers until nothing applies.
+
+    Law-agnostic: acts are built from the manifest's declarations with values
+    from the verdict's own choice slots, so nothing here knows which law it is
+    driving. Returns the acts applied, and any subject-monotonicity failure
+    seen on the way -- erasure being prohibited either way.
+    """
+    from potato_hamlet.oracle import OracleRejected
+
+    applied: list[dict] = []
+    losses: list[str] = []
+    seen = client.subjects()
+    for _ in range(limit):
+        moved = False
+        for citizen, entries in (client.check().get("pending") or {}).items():
+            for entry in entries:
+                eca_id = entry.get("eca") if isinstance(entry, dict) else entry
+                eca = by_id.get(eca_id)
+                if eca is None:
+                    continue
+                act = act_from_declaration(eca, entry, citizen)
+                if act is None:
+                    continue
+                try:
+                    client.apply(act)
+                    applied.append(act)
+                    moved = True
+                except OracleRejected:
+                    continue
+                break
+            if moved:
+                break
+        if not moved:
+            break
+        now = client.subjects()
+        for gone in sorted(seen - now):
+            losses.append(f"after {applied[-1]['eca']}: <{gone}>")
+        if losses:
+            break
+        seen |= now
+    return applied, losses
+
+
+def _manifest_of(case: Path) -> tuple[dict, list[str]]:
+    try:
+        return yaml.safe_load((case / "manifest.yaml").read_text()) or {}, []
+    except Exception as e:  # noqa: BLE001 - reported by check_manifest
+        return {}, [f"manifest.yaml: cannot read: {e}"]
+
+
+def check_reading_declarations(case: Path, og: Graph) -> list[str]:
+    """Every reading the oracle emits is declared in the manifest (5.6).
+
+    A reading is the one part of the verdict a consumer cannot derive: it has
+    an id the law chose and a class it resolves through, so an undeclared one
+    is unrenderable. The manifest is the single declaration site, and the gate
+    checks both directions that are checkable -- every EMITTED reading is
+    declared, and every declared `class` is a real class.
+
+    A declared reading the oracle has not emitted is NOT an error: a law may
+    have results it has not reached. quorum's `quorumHeld` is absent until its
+    cycle is counted precisely so that "not yet determined" reads differently
+    from "determined, and false".
+    """
+    manifest, errs = _manifest_of(case)
+    if errs:
+        return errs
+    declared = manifest.get("readings")
+    if declared is None:
+        return [
+            "manifest.yaml: declares no readings block, so no consumer can render a "
+            "result. Declare each reading the oracle may emit with its id, the class "
+            "a `ref` reading resolves through, a label, and a template."
+        ]
+
+    errors: list[str] = []
+    classes = declared_classes(og)
+    ids = [r.get("id") for r in declared]
+    if len(ids) != len(set(ids)):
+        errors.append("manifest.yaml: duplicate reading ids")
+    for r in declared:
+        rid = r.get("id")
+        if not rid:
+            errors.append("manifest.yaml: a readings entry declares no id")
+            continue
+        for field in ("label", "template"):
+            if not r.get(field):
+                errors.append(
+                    f"manifest.yaml: reading '{rid}' declares no {field}, so a "
+                    f"consumer has nothing to display"
+                )
+        cls = r.get("class")
+        if cls is not None and expand(f"ph:{cls}") not in classes:
+            errors.append(
+                f"manifest.yaml: reading '{rid}' names class '{cls}', which "
+                f"ontology.ttl does not declare"
+            )
+
+    client, cerrs = _client(case)
+    if client is None:
+        return errors + cerrs
+    by_id = {e.get("id"): e for e in manifest.get("ecas", [])}
+    try:
+        play_forward(client, by_id)
+        emitted = client.check().get("readings") or []
+    except Exception as e:  # noqa: BLE001
+        return errors + [
+            f"readings: could not drive the law to a result state: {e}"
+        ]
+
+    if not emitted:
+        errors.append(
+            "readings: the oracle emitted no reading even after being driven to a "
+            "result state, so this check proved nothing"
+        )
+    by_decl = {r.get("id"): r for r in declared}
+    for reading in emitted:
+        rid = reading.get("id")
+        if rid not in by_decl:
+            errors.append(
+                f"manifest.yaml: the oracle emits reading '{rid}' but the readings "
+                f"block does not declare it, so a consumer cannot render it"
+            )
+            continue
+        # A ref reading must resolve through the class the manifest declares, or
+        # the label the consumer looks up belongs to a different concept.
+        want = by_decl[rid].get("class")
+        got = reading.get("refClass")
+        if got is not None and want is None:
+            errors.append(
+                f"manifest.yaml: reading '{rid}' is a `ref` reading pointing at "
+                f"{got}, but the declaration resolves through nothing; declare the "
+                f"class so the label resolves"
+            )
+        elif got is not None and want is not None and PH + want != got:
+            errors.append(
+                f"manifest.yaml: reading '{rid}' declares class '{want}' but the "
+                f"oracle resolves it through {got}"
+            )
+    return errors
+
+
 def check_graph_roundtrip(case: Path) -> list[str]:
     """The graph survives `apply`, and re-checking agrees (6.11).
 
@@ -737,51 +880,20 @@ def check_graph_roundtrip(case: Path) -> list[str]:
 
     from potato_hamlet.oracle import OracleRejected, UndeclaredSubject
 
-    try:
-        manifest = yaml.safe_load((case / "manifest.yaml").read_text()) or {}
-    except Exception as e:  # noqa: BLE001
-        return [f"manifest.yaml: cannot build acts to round-trip: {e}"]
+    manifest, merrs = _manifest_of(case)
+    if merrs:
+        return merrs
     by_id = {e.get("id"): e for e in manifest.get("ecas", [])}
 
     errors: list[str] = []
-    seen = client.subjects()
-    applied = 0
+    applied, losses = play_forward(client, by_id)
+    for lost in losses:
+        errors.append(
+            f"graph round trip: `apply` removed {lost}. Erasure is prohibited: "
+            f"the only revisable fact is counting."
+        )
 
-    for _ in range(40):
-        verdict = client.check()
-        moved = False
-        for citizen, entries in (verdict.get("pending") or {}).items():
-            for entry in entries:
-                eca_id = entry.get("eca") if isinstance(entry, dict) else entry
-                eca = by_id.get(eca_id)
-                if eca is None:
-                    continue
-                act = act_from_declaration(eca, entry, citizen)
-                if act is None:
-                    continue
-                try:
-                    client.apply(act)
-                    applied += 1
-                    moved = True
-                except OracleRejected:
-                    continue
-                break
-            if moved:
-                break
-        if not moved:
-            break
-        now = client.subjects()
-        lost = seen - now
-        if lost:
-            errors.append(
-                f"graph round trip: `apply` dropped {len(lost)} individual(s) the "
-                f"graph already had, first {sorted(lost)[0]}. Erasure is prohibited: "
-                f"the only revisable fact is counting."
-            )
-            break
-        seen |= now
-
-    if applied == 0 and not errors:
+    if not applied and not errors:
         errors.append(
             "graph round trip: no act could be applied from the seeded graph, so "
             "the round trip proved nothing"
@@ -904,6 +1016,7 @@ def run(case: Path, schema_only: bool) -> tuple[list[tuple[str, list[str]]], lis
         if not schema_only:
             record("manifest vs oracle", check_manifest_against_oracle(case, og))
             record("clock totality", check_clock_totality(case))
+            record("readings declared", check_reading_declarations(case, og))
             record("graph round trip", check_graph_roundtrip(case))
     if pg is not None and og is not None:
         record("population", check_population(pg, og))
