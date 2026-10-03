@@ -1,5 +1,5 @@
 case: mayor-quorum
-freeze: sha256:c6a48f34059d3d5eeaa6cd80164fc531cbcb43f440e00b2c82ce0919b5c130b6
+freeze: sha256:cb5b06154857ac0897bf4377da95ec813ed5fe42848ff7966ec57d8fc308e937
 ontology: ontology.ttl
 population: population.ttl
 oracle: oracle
@@ -69,23 +69,16 @@ ecas:
   label: Schedule repeat election
   message: '{holder} must schedule a repeat election 30 days later with a fresh registry'
   modality: must
-
-# Every reading the oracle can emit, with the class a `ref` reading resolves
-# through and the template a consumer renders it with. The gate refuses a set
-# where the oracle emits a reading this block does not declare, so a new
-# result cannot appear in the verdict without also being displayable.
 readings:
 - id: mayor
   class: Citizen
   label: Mayor
-  template: "{label}"
+  template: '{label}'
 - id: mayorVotes
   class: null
   label: Votes for the mayor
-  template: "{value} votes"
-# Absent until this cycle is counted: "not yet determined" and "determined,
-# and it failed" are different facts, and only one of them is in the verdict.
+  template: '{value} votes'
 - id: quorumHeld
   class: null
   label: Quorum held
-  template: "quorum {value}"
+  template: quorum {value}

@@ -20,7 +20,12 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-TRACKED = ["law.txt", "ontology.ttl", "rules.lean"]
+# population.ttl is tracked: the spec puts the seeded individuals in the
+# variant layout, and a freeze that ignores the seed is not a freeze of the
+# set. It was omitted while the seed still lived inside ontology.ttl, which
+# WAS tracked -- moving the individuals out silently dropped them from the
+# hash.
+TRACKED = ["law.txt", "ontology.ttl", "population.ttl", "rules.lean"]
 
 
 def digest(case: Path, manifest_body: dict) -> str:
@@ -69,9 +74,15 @@ def verify(case: Path) -> int:
             changed.append(f"{name} (missing)")
     body = {k: v for k, v in data.items() if k != "freeze"}
     if digest(case, body) != frozen:
-        # narrow down: hash each tracked file region is opaque, so report
-        # the set as changed; per-file mtimes guide the author.
-        changed.append("law.txt/ontology.ttl/rules.lean/manifest-body (hash mismatch)")
+        # Which file changed cannot be recovered from a single combined hash,
+        # so the whole set is reported. Built from TRACKED rather than written
+        # out: a hardcoded list goes stale the moment a file is added, and then
+        # it names files that did not change while omitting the one that did.
+        # Per-file mtimes guide the author to the culprit.
+        changed.append(
+            "one or more of " + " / ".join(TRACKED) + " / manifest body "
+            "(hash mismatch; the combined hash cannot say which)"
+        )
     if changed:
         print(f"refused: {case.relative_to(ROOT)} changed after freeze:")
         for c in changed:

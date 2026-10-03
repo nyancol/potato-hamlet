@@ -66,7 +66,7 @@
 
 ## 8. Freeze, docs, and validation
 
-- [ ] 8.1 Rebuild both oracles and re-freeze both artefact sets, and verify `scripts/freeze.py --verify` passes for each case
+- [x] 8.1 Rebuild both oracles and re-freeze both artefact sets, and verify `scripts/freeze.py --verify` passes for each case
 - [ ] 8.2 Verify `scripts/test_oracle.py`, `scripts/test_quorum.py`, and `scripts/test_conformance.py` still pass, confirming the work touched no rule semantics beyond the wire format
 - [ ] 8.3 Rewrite the protocol and verdict sections of `artefacts/README.md` against the compiled oracle, covering the graph wire format, `readings`, the structured witness, the relationship vocabulary, and that sequencing lives in the calendar while `ph:causedBy` states a permitted dependency the Lean guard evaluates, and verify every documented field name matches actual output including the optional `check [file]` argument
 - [ ] 8.4 Run `openspec validate framework-invariants-and-verdict-contract --type change --strict` and verify the planning artifacts are complete and consistent

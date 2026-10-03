@@ -1,5 +1,5 @@
 case: mayor-2027
-freeze: sha256:654d78f29c0fcd35dd19a90833d82192eac06ffa37eea71120f8d878e6de339b
+freeze: sha256:f775aed41c0b67a7f5c6ce1e57d8d4ba0f9e64399e83a1ca97e4804fae497008
 ontology: ontology.ttl
 population: population.ttl
 oracle: oracle
@@ -61,17 +61,12 @@ ecas:
   label: Proclaim mayor
   message: '{holder} must proclaim the winner (oldest on tie)'
   modality: must
-
-# Every reading the oracle can emit, with the class a `ref` reading resolves
-# through and the template a consumer renders it with. The gate refuses a set
-# where the oracle emits a reading this block does not declare, so a new
-# result cannot appear in the verdict without also being displayable.
 readings:
 - id: mayor
   class: Citizen
   label: Mayor
-  template: "{label}"
+  template: '{label}'
 - id: mayorVotes
   class: null
   label: Votes for the mayor
-  template: "{value} votes"
+  template: '{value} votes'
