@@ -20,9 +20,16 @@ def cmdList : IO UInt32 := do
   IO.println (Json.mkObj [("ecas", toJson ecaIds)]).compress
   return 0
 
+/-- The graph JSON, from a file argument or stdin.
+
+    `args` is the full argv, so for `check <file>` the verb is at index 0 and
+    the PATH IS AT INDEX 1. The pattern this replaces looked for it at index 2
+    and needed four arguments to match, so `check <file>` fell through to an
+    empty stdin and reported a parse error at offset 0 -- while the usage
+    string advertised the argument as working. -/
 def readInput (args : List String) : IO String := do
   match args with
-  | _ :: _ :: path :: _ => IO.FS.readFile path
+  | _ :: path :: _ => IO.FS.readFile path
   | _ => do
     let stdin ← IO.getStdin
     stdin.readToEnd

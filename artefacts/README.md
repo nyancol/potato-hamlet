@@ -6,161 +6,226 @@ One directory per law variant: `artefacts/<case>/`.
 
 ```
 artefacts/mayor-2027/
-  law.txt        # source governance text (single source of truth)
-  ontology.ttl   # GFO-light ontology (draft via prompts/onto-v1.md)
-  rules.lean     # ECA conditions + holders as Bool/Prop twins (prompts/lean-v1.md)
-  manifest.yaml  # loader + display glue (prompts/manifest-v1.md)
+  law.txt         # source governance text (single source of truth)
+  ontology.ttl    # frozen TBox: classes and properties only
+  population.ttl  # seeded individuals the law starts from
+  rules.lean      # ECA conditions + holders as Bool/Prop twins
+  manifest.yaml   # loader + display glue
+  oracle          # compiled binary (rebuilt by scripts/build_oracle.py)
 ```
 
-`law.txt` in, drafts out, machine checks, human freeze. The TUI (Phase 2)
-loads only frozen sets. See the `law-extraction` spec for the gate.
+`law.txt` in, drafts out, machine checks, human freeze. The TUI loads only
+frozen sets; `scripts/freeze.py --verify artefacts/<case>` is its entry point.
+See the `law-extraction` spec for the gate.
 
-## Snapshot schema (Python -> oracle `check`, JSON)
+`ontology.ttl` holds **no individuals** — it is a frozen schema. Seeded
+individuals live in `population.ttl` in the same RDF serialisation, and
+individuals created during simulation are minted into the runtime knowledge
+graph. A law may also mint further `ph:CalendarPoint` / `ph:CalendarSpan`
+individuals during `apply`: the frozen calendar is a seed, not a ceiling, so a
+process that schedules work at a moment not fixed at review time still has a
+displayable calendar. Only Lean computes a minted individual's date or day
+index.
 
-Flat shape (`artefacts/mayor-2027`, no quorum):
+## The knowledge graph is the snapshot
+
+There is no bespoke JSON state object. `check` and `apply` exchange **typed
+instance triples** — the ABox — and the ontology's class declarations *are* the
+schema. Only the ABox crosses the wire; the TBox never does.
+
+### Wire format
 
 ```json
-{
-  "day": 9,
-  "hour": 10,
-  "citizens": [
-    {"id": "https://potato-hamlet.example/ontology/citizen/alice", "age": 71}
-  ],
-  "candidates": ["https://potato-hamlet.example/ontology/citizen/bob"],
-  "ballots": [
-    {"owner": "https://potato-hamlet.example/ontology/citizen/alice",
-     "candidate": "https://potato-hamlet.example/ontology/citizen/bob",
-     "delivered": true}
-  ],
-  "registry": ["https://potato-hamlet.example/ontology/citizen/bob"],
-  "box": []
-}
+{"graph": [
+  ["<subject-iri>", "<predicate-iri>", "<object-iri>"],
+  ["<subject-iri>", "<predicate-iri>", {"lit": "Announce, Jan 2", "type": "string"}]
+]}
 ```
 
-History shape (`artefacts/mayor-quorum`): per-cycle state lives inside a
-cycle record; only population (`citizens`) and office (`mayorId`) are
-top-level. The current cycle is the last element (invariant: at least one
-cycle). Each cycle id equals its OWL `MayorElectionCycle` individual IRI,
-deterministic from `(case, index)`; dates derive per index
-(`E(k) = 10+30k`, announce `E-10`, prepare `E-1`, polls 9-19 on E-day).
-Repeats never shift the 4-year election clock.
+- An IRI is a bare JSON string; a literal is `{"lit": ..., "type": ...}` where
+  `type` is the XSD datatype local name (`"string"`, `"integer"`, `"boolean"`,
+  `"date"`).
+- **The list is unordered.** Nothing may depend on the order triples arrive in,
+  so two round-trips of one graph produce byte-identical verdicts — including
+  the order of a violation witness's `refs`. `scripts/test_client.py` asserts
+  this by permuting the wire.
+- `apply` returns the **whole** graph and the consumer replaces its stored one
+  wholesale. Never merge. A returned subject typed by a class the ontology does
+  not declare — or carrying no type at all — is an error, and it is an error
+  *before* any write, so a rejected graph leaves the store untouched.
 
-```json
-{
-  "citizens": [
-    {"id": "https://potato-hamlet.example/ontology/citizen/alice", "age": 71}
-  ],
-  "mayorId": null,
-  "cycles": [
-    {"id": "https://potato-hamlet.example/ontology/election/mayor-quorum-r0",
-     "day": 10, "hour": 20,
-     "candidates": ["https://potato-hamlet.example/ontology/citizen/bob"],
-     "ballots": [],
-     "registry": [],
-     "box": [{"voter": "https://potato-hamlet.example/ontology/citizen/alice",
-              "candidate": "https://potato-hamlet.example/ontology/citizen/bob"}],
-     "announced": true, "prepared": true,
-     "counted": true, "proclaimed": false, "outcome": "void"}
-  ]
-}
-```
+### Lifecycle and identity
 
-- `day`: Nat day-of-cycle (election day = 10, announce = 0, prepare = 9).
-- `hour`: Nat hour on `day` (polls 9-19 on election day).
-- Entity ids equal the full OWL individual IRIs from `ontology.ttl`.
-- Closed world: the snapshot enumerates the full finite population
-  (OWL open-world vs Lean closed-world closure happens at snapshot build).
+A process instance relates to a `Chronoid` by `ph:hasTime`; the Chronoid carries
+`gfo-core:temporallyStartedBy` / `temporallyFinishedBy` pointing at
+`gfo-light:TimeBoundary` individuals, each denoting one moment (both
+`ph:dayIndex` and `ph:atHour`). A **historical** instance carries a finish bound
+and an outcome; the current instance is the one without a finish bound. Current
+position follows from that declaration, never from an ordering convention like
+"the current cycle is the last element". Each boundary individual carries
+`ph:cycleIndex`, so per-instance date arithmetic reads the declaration rather
+than a rank.
 
-## Verdict schema (oracle `check` -> Python, JSON)
+Every IRI is deterministic from `(case, index)`; a Role is played *by* a citizen
+(`ph:playedBy`) *in* a context (`ph:roleIn`).
 
-```json
-{
-  "fired": ["prepare"],
-  "pending": {
-    "https://potato-hamlet.example/ontology/citizen/alice": ["prepare"]
-  },
-  "violations": [
-    {"eca": "all_distributed",
-     "witness": {"citizen": "https://potato-hamlet.example/ontology/citizen/alice",
-                 "candidate": "https://potato-hamlet.example/ontology/citizen/cara"}}
-  ],
-  "would_win": "https://potato-hamlet.example/ontology/citizen/bob",
-  "phase": "BallotsReady"
-}
-```
+### Relationship vocabulary
 
-- `pending` maps citizen IRI -> list of ECA ids whose holder is that
-  citizen and whose conditions hold now.
-- `violations` carry machine-readable witnesses plus display strings so
-  the guide names what is missing (advisory only; humans decide/act).
-- `would_win` is advisory: proclamation stays a human act of the holder.
+Declared once, each grounded in GFO, rather than reused from GFO directly:
 
-## Transition table (drivers request through `oracle apply`)
+| property | grounding |
+|---|---|
+| `ph:hasPhase` | `gfo-core:hasSituationPart` |
+| `ph:hasParticipant` | `gfo-core:hasParticipant` |
+| `ph:hasTime` | `gfo-core:hasTime` |
+| `ph:causedBy` | `gfo-core:causedBy` |
+| `ph:relates`, `ph:containsRole` | `gfo-light:relates`, `gfo-light:containsRole` |
+| `ph:qualityOf` | `gfo-light:qualityOf` |
+| `ph:roleIn`, `ph:playedBy` | `gfo-light:roleIn`, `gfo-light:playedBy` |
+| `ph:atDate` | `gfo-core:dateTimeValue` |
+| `ph:age`, `ph:atHour`, `ph:dayIndex` | `gfo-core:decimalValue` |
+| `ph:label` | `rdfs:label` |
+| `ph:marksPhase` | grounded **by type**: domain `gfo-light:Chronoid`, `gfo-light:TimeBoundary`, range `gfo-core:Process` |
 
-`apply` is the single enforcing path; `check` stays advisory. Each act is
-guarded by the same conditions `check` evaluates — a failed guard returns a
-rejection naming it instead of a new snapshot.
+`ph:marksPhase` is not the inverse of `gfo-core:hasTime`: that relation runs
+situation → time and its object is an *individual*, whereas `marksPhase`'s
+object is a phase **class** — the frozen shared calendar can name a phase type
+but no instance exists yet at review time. It is grounded by declaring GFO
+classes as its domain and range instead.
 
-| act | parameters | snapshot effect | rejects when |
-|-----|-----------|-----------------|--------------|
-| announce | — | `announced := true` | no authority; announce not due |
-| nominate | `citizen` | `registry += citizen` | registry closed; already registered |
-| prepare | — | `prepared := true`, full citizen×candidate delivered `ballots` | no authority; prepare not due |
-| vote | `voter`, `candidate` | `box += one entry` | polls closed; already voted |
-| count | — | `counted := true` | count not due |
-| proclaim | — | `proclaimed := true`, `mayorId := winner` (oldest on tie) | no candidates; proclaim not due |
-| repeat (quorum flavors) | — | appends a fresh successor cycle (`E+30`, empty registry/ballots/box, void cycle marked and preserved) | quorum not failed |
+**Sequencing lives in the calendar, not the schema.** No ordering relation
+appears between phases: they overlap, so a chain would assert something false,
+and the calendar bounds already answer ordering and overlap from one source.
+`ph:causedBy` states a *permitted* dependency that a `gfo-core:State` can bring
+about in a Process. Whether the State actually holds — and so whether the change
+fires — is evaluated only by the Lean guard. Nothing in the artefacts asserts
+that a dependency has fired.
 
-On quorum flavors `repeat` is a first-class ECA held by the authority
-(mayor-or-oldest, modality `must`). After a void cycle, `check` pends
-`repeat` on that citizen alongside the quorum violation; `apply repeat`
-appends; further failures chain (`E+30` each) until quorum is valid.
-
-## Oracle CLI protocol (cold-spawn, stateless)
+## CLI protocol (cold-spawn, stateless)
 
 ```
-oracle-mayor list
-# {"ecas": ["announce", "nominate", "prepare", "vote", "count", "proclaim"]}
-# Quorum flavors append "repeat".
-# Must equal manifest.yaml eca ids or the loader refuses the set.
-
-oracle-mayor check < snapshot.json
-# verdict JSON per schema above; exit 0. Exit non-zero + stderr on bad input.
-# Quorum history shape: {"citizens": [...], "mayorId": null, "cycles": [...]};
-# an empty "cycles" list is rejected ("cycles must be non-empty").
-
-oracle-mayor apply < envelope.json
-# -> new snapshot JSON, exit 0; or {"error": "<guard reason>"}, exit 1.
-# Rejection reasons name the failed guard ("quorum not failed",
-# "already voted", "registry closed", ...); the stored snapshot is unchanged.
+oracle list                      -> {"ecas": [...]}
+oracle check < graph.json        -> verdict JSON, exit 0
+oracle check < file.json         -> same, reading the graph from a file argument
+oracle apply < envelope.json     -> new graph JSON, exit 0
 ```
 
-Envelope example (valid JSON as written):
+`check` reads the graph from a file argument if given, otherwise from stdin;
+`apply` always reads stdin. `list` must equal the manifest's ECA ids or the gate
+refuses the set. An unknown verb prints usage and exits 2; bad input prints to
+stderr and exits 1.
+
+```
+$ oracle list
+{"ecas":["announce","nominate","prepare","vote","count","proclaim"]}
+```
+
+`apply` takes an act plus the whole graph, and on success returns the whole
+updated graph — not a delta:
 
 ```json
 {"act": {"eca": "vote",
          "voter": "https://potato-hamlet.example/ontology/citizen/alice",
          "candidate": "https://potato-hamlet.example/ontology/citizen/bob"},
- "snapshot": {"day": 10, "hour": 12,
-              "citizens": [{"id": "https://potato-hamlet.example/ontology/citizen/alice", "age": 71}],
-              "candidates": ["https://potato-hamlet.example/ontology/citizen/bob"],
-              "ballots": [], "registry": ["https://potato-hamlet.example/ontology/citizen/bob"],
-              "box": [], "announced": true, "prepared": true,
-              "counted": false, "proclaimed": false, "mayorId": null}}
+ "graph": [["<subject>", "<predicate>", "<object>"], ...]}
 ```
 
-Quorum history-shape envelope (valid JSON as written):
+A rejected act returns `{"error": "<guard reason>"}` with exit 1 and the stored
+graph is unchanged. Reasons name the failed guard: `"quorum not failed"`,
+`"already voted"`, `"registry closed"`, `"polls closed"`, `"no candidates"`.
+
+There is no `tick` verb. The driver writes `ph:Clock` directly, because
+advancing time is a simulation control rather than a rule and a cold subprocess
+spawn on the most frequent interaction would be a latency regression. The cost
+is that the clock is untrusted Lean input, which is why `check` and `apply` owe
+totality over it — the gate exercises both far outside the law's calendar.
+
+## Verdict schema
 
 ```json
-{"act": {"eca": "repeat"},
- "snapshot": {"citizens": [{"id": "https://potato-hamlet.example/ontology/citizen/alice", "age": 71}],
-              "mayorId": null,
-              "cycles": [{"id": "https://potato-hamlet.example/ontology/election/mayor-quorum-r0",
-                          "day": 10, "hour": 20, "candidates": [], "ballots": [],
-                          "registry": [], "box": [], "announced": true,
-                          "prepared": true, "counted": true,
-                          "proclaimed": false, "outcome": null}]}}
+{
+  "fired": ["vote", "count", "proclaim", "repeat"],
+  "pending": {
+    "https://potato-hamlet.example/ontology/citizen/alice": [
+      {"eca": "proclaim",
+       "process": "https://potato-hamlet.example/ontology/election/mayor-quorum-r0"},
+      {"eca": "repeat",
+       "process": "https://potato-hamlet.example/ontology/election/mayor-quorum-r0"}
+    ]
+  },
+  "phase": "PollsClosed",
+  "readings": [
+    {"id": "mayor", "kind": "ref",
+     "refClass": "https://potato-hamlet.example/ontology/Citizen",
+     "value": "https://potato-hamlet.example/ontology/citizen/alice"},
+    {"id": "mayorVotes", "kind": "decimal", "value": 1},
+    {"id": "quorumHeld", "kind": "flag", "value": false}
+  ],
+  "violations": [
+    {"eca": "quorum",
+     "witness": {
+       "counts": [{"name": "voted", "value": 1}, {"name": "total", "value": 3}],
+       "refs": ["https://potato-hamlet.example/ontology/citizen/bob",
+                "https://potato-hamlet.example/ontology/citizen/cara"]},
+     "detail": "quorum failed: 1 voted of 3, repeat on day 40"}
+  ]
+}
 ```
 
-Each `check`/`apply` spawns the compiled binary fresh (snapshot in, verdict
-out, exit). No warm/long-lived mode in the prototype.
+- `fired` — ECAs whose conditions currently hold. Advisory.
+- `pending` — citizen IRI → duties owed now. Each entry names its ECA, the
+  process **instance** it belongs to, and `choices`: the options available at
+  this instant for any parameter the manifest sources from `choices`. That is
+  what lets a consumer build a complete act without reading law-specific state,
+  so no consumer needs a per-law parameter table.
+- `phase` — the current state, resolvable by IRI from a declared
+  `gfo-core:State` subclass. Top-level.
+- `readings` — the law's results, reported without a verdict field of their own.
+  Each carries a law-chosen `id`, a `kind` from the closed set
+  `decimal` / `ref` / `flag`, and a `value`. A `ref` reading also carries
+  `refClass`, the ontology class of the individual it points at, so the label
+  resolves from the graph without knowing the law. **A law with no result of a
+  shape emits no reading** — absence is how a consumer learns there is nothing,
+  so there is never a null to mistake for a value. The manifest's `readings`
+  block declares each one with its id, class, label and template; the gate
+  refuses a set where the oracle emits a reading the manifest does not declare.
+- `violations` — each carries a structured witness plus a display string. The
+  witness names the individuals that break a quantified condition under `refs`,
+  and quantities that fell short under `counts`, each count giving a `name` and
+  a `value`. That pair suffices for the framework's FOL subset — universal or
+  existential over finite sets plus counting — so no law needs a witness field
+  of its own. `detail` is for display only.
+
+No field is named for any single process concept, so a law with a genuinely new
+result adds a reading rather than a verdict field.
+
+## Transition table
+
+`apply` is the single enforcing path; `check` stays advisory. Each act is
+guarded by the same conditions `check` evaluates — a failed guard returns a
+rejection naming it instead of a new graph.
+
+| act | parameters | graph effect | rejects when |
+|-----|-----------|--------------|--------------|
+| announce | — | `announced := true`, start bound stamped on the Chronoid | no authority; announce not due |
+| nominate | `citizen` | nomination individual + `CandidateRole` played by that citizen | registry closed; already registered |
+| prepare | — | `prepared := true`, one ballot individual per citizen×candidate | no authority; prepare not due |
+| vote | `voter`, `candidate` | vote individual + its roles | polls closed; already voted |
+| count | — | `counted := true` | count not due |
+| proclaim | — | `proclaimed := true`, `ph:outcome := "valid"`, finish bound stamped | no candidates; proclaim not due |
+| repeat (quorum flavors) | — | appends a fresh successor cycle (`E+30`, empty registry/ballots/box), marks the void cycle `ph:outcome := "void"`, and **mints that cycle's calendar** | quorum not failed |
+
+No transition removes an individual. Once a vote is cast or a ballot delivered
+it persists, and what a later rule may affect is only how it is counted: when a
+finished instance's outcome means its contributions do not count, the outcome
+records that rather than anything being withdrawn. Erasure is not a power a law
+lacks by policy — it is not a power it has. The gate asserts this as a property,
+applying each ECA in turn and confirming every prior subject survives.
+
+On quorum flavors `repeat` is a first-class ECA held by the authority
+(mayor-or-oldest, modality `must`). After a void cycle, `check` offers `repeat`
+on that citizen alongside the quorum violation; `apply repeat` appends; further
+failures chain (`E+30` each) until quorum holds.
+
+Each `check` / `apply` spawns the compiled binary fresh (graph in, verdict out,
+exit). No warm or long-lived mode in the prototype.
