@@ -223,6 +223,69 @@ def main(argv: list[str]) -> int:
            bool(decimals) and bool(refs),
            f"kinds seen: {sorted(kinds)}")
 
+    # ---- witnesses: structured, and interpretable without knowing the law --
+    # Flattened `witnessCitizen`/`witnessCandidate` fields meant only a consumer
+    # that already knew the law could read a violation, and a violation about a
+    # COUNT rather than a pair of individuals had nowhere to put it. The quorum
+    # failure was that case: nulls for both fields, counts only inside `detail`.
+    v = c.check()
+    expect("no violation carries a flattened witness field",
+           all("witnessCitizen" not in x and "witnessCandidate" not in x
+               for x in v["violations"]), str(v["violations"]))
+    expect("every violation carries a structured witness",
+           all(isinstance(x.get("witness"), dict) for x in v["violations"]),
+           str(v["violations"]))
+    expect("a witness has refs and counts",
+           all(isinstance(x["witness"].get("refs"), list)
+               and isinstance(x["witness"].get("counts"), list)
+               for x in v["violations"]), str(v["violations"]))
+    expect("every named count gives a name and a value",
+           all(isinstance(cn.get("name"), str) and isinstance(cn.get("value"), int)
+               for x in v["violations"] for cn in x["witness"]["counts"]),
+           str(v["violations"]))
+    expect("every ref is an IRI present in the graph",
+           all(URIRef(r) in c.graph.subjects(RDF.type, None)
+               for x in v["violations"] for r in x["witness"]["refs"]),
+           str(v["violations"]))
+
+    if "repeat" in by_id:  # the quorum flavour
+        # One voter of three fails quorum, so the count witness must appear in
+        # the structured fields and not only in the display string.
+        q = fresh()
+        for who in (A, B, C):
+            # announce is a once-per-cycle duty: set the clock inside the loop
+            # so the position is rewritten, not the announcement repeated.
+            q.set_time(0)
+            try:
+                q.apply({"eca": "announce"})
+            except OracleRejected:
+                pass
+            q.apply({"eca": "nominate", "citizen": who})
+        q.set_time(9)
+        q.apply({"eca": "prepare"})
+        q.set_time(10, 12)
+        entry = next(
+            e for es in q.check()["pending"].values() for e in es if e["eca"] == "vote"
+        )
+        q.apply({"eca": "vote", "voter": A,
+                 "candidate": entry["choices"]["candidate"][0]})
+        q.set_time(10, 20)
+        q.apply({"eca": "count"})
+        qv = q.check()
+        quorum = next((x for x in qv["violations"] if x["eca"] == "quorum"), None)
+        expect("a failed quorum reports a violation", quorum is not None,
+               str(qv["violations"]))
+        if quorum:
+            counts = {cn["name"]: cn["value"] for cn in quorum["witness"]["counts"]}
+            expect("the quorum witness gives voted and total as counts",
+                   counts == {"voted": 1, "total": 3}, str(counts))
+            expect("the quorum witness names who did not turn out",
+                   sorted(r.rsplit("/", 1)[-1] for r in quorum["witness"]["refs"])
+                   == ["bob", "cara"], str(quorum["witness"]["refs"]))
+            expect("the counts survive outside the display string",
+                   "1 voted of 3" in quorum["detail"]
+                   and counts.get("voted") == 1, quorum["detail"])
+
     print(f"\n{'all pass' if not fails else f'{len(fails)} FAILURES: {fails}'}")
     return 1 if fails else 0
 

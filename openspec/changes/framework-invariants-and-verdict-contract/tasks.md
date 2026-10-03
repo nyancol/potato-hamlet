@@ -39,7 +39,7 @@
 - [x] 5.2 Add parameter slots to `pending` in both rule sets carrying the choices available at that instant, and verify a pending vote entry names the candidates selectable by the acting citizen
 - [ ] 5.3 Add the process instance IRI to each `pending` entry in both rule sets, and verify a duty resolves to the instance it belongs to in both the flat and cycle-history shapes
 - [ ] 5.4 Verify a duty on a multi-instance process type takes a parameter sourced from `choices` over the open instances, and that an act naming a chosen instance is accepted while one naming an unknown instance is rejected with a named guard
-- [ ] 5.5 Give violations a structured witness of `refs` and named `counts`, replacing the flattened `witnessCitizen`/`witnessCandidate` fields, and verify the quorum failure reports voted and total as counts rather than only inside `detail`
+- [x] 5.5 Give violations a structured witness of `refs` and named `counts`, replacing the flattened `witnessCitizen`/`witnessCandidate` fields, and verify the quorum failure reports voted and total as counts rather than only inside `detail`
 - [ ] 5.6 Declare a `readings` block (id, class, label, template) in both manifests covering every reading the oracle emits, and verify no emitted reading lacks a declaration
 
 ## 6. Review gate

@@ -122,10 +122,50 @@ structure PendingEntry where
   choices : List (String × List String)
 deriving Repr, DecidableEq
 
+/-! Structured violation witnesses.
+
+    A violation used to carry flattened per-law fields -- `witnessCitizen` and
+    `witnessCandidate` -- so the witness was only interpretable by a consumer
+    that already knew which law it was reading, and a law whose violation was
+    about a COUNT rather than a pair of individuals had nowhere to put it. The
+    quorum failure is the case that mattered: the compiled oracle returned
+    null for both fields and conveyed the counts only inside the English
+    `detail` string, so nothing machine-readable survived.
+
+    `refs` names the individuals that break a quantified condition and
+    `counts` the quantities that fell short. That pair suffices for the whole
+    framework FOL subset -- universal or existential over finite sets, plus
+    counting -- so no law needs a witness field of its own, ever. -/
+
+/-- One quantity that fell short, named so it can be read without the law. -/
+structure CountWitness where
+  name : String
+  value : Nat
+deriving Repr, DecidableEq
+
+structure Witness where
+  refs : List String
+  counts : List CountWitness
+deriving Repr, DecidableEq
+
+def Witness.ofRefs (refs : List String) : Witness :=
+  { refs := refs, counts := [] }
+
+def Witness.withCounts (refs : List String) (counts : List (String × Nat)) : Witness :=
+  { refs := refs, counts := counts.map (fun (n, v) => CountWitness.mk n v) }
+
+instance : ToJson CountWitness where
+  toJson w := Json.mkObj [("name", toJson w.name), ("value", toJson w.value)]
+
+instance : ToJson Witness where
+  toJson w :=
+    Json.mkObj [
+      ("refs", Json.arr (w.refs.toArray.map toJson)),
+      ("counts", Json.arr (w.counts.toArray.map toJson))]
+
 structure Violation where
   eca : String
-  witnessCitizen : Option String
-  witnessCandidate : Option String
+  witness : Witness
   detail : String
 deriving Repr, DecidableEq
 
@@ -270,8 +310,7 @@ instance : ToJson Snapshot where
 instance : ToJson Violation where
   toJson v := Json.mkObj [
     ("eca", toJson v.eca),
-    ("witnessCitizen", match v.witnessCitizen with | none => Json.null | some c => toJson c),
-    ("witnessCandidate", match v.witnessCandidate with | none => Json.null | some c => toJson c),
+    ("witness", toJson v.witness),
     ("detail", toJson v.detail)]
 
 /-- A pending entry as JSON: the ECA plus any parameter choices. -/
@@ -887,21 +926,28 @@ def pendingOf (s : Snapshot) : List PendingEntry :=
     else []
   authPending ++ nominees ++ voters
 
+/-- Citizens who did not vote: the individuals a failed quorum is about. The
+    counts say how far short it fell; these say who made it short. -/
+def absentees (s : Snapshot) : List String :=
+  s.citizens.filterMap fun c => if voted? s c.id then none else some c.id
+
 def violationsOf (s : Snapshot) : List Violation :=
   let dist : List Violation := match firstMissing? s with
     | none => []
     | some (c, cand) =>
       if decide (prepareK (curIdx s) ≤ (cur s).day) then
-        [{ eca := "all_distributed", witnessCitizen := some c,
-           witnessCandidate := some cand, detail := "ballot missing" }]
+        [{ eca := "all_distributed", witness := Witness.ofRefs [c, cand],
+           detail := "ballot missing" }]
       else []
   let dupes : List Violation := (doubleVoters s).map (fun v =>
-    { eca := "single_vote", witnessCitizen := some v, witnessCandidate := none,
+    { eca := "single_vote", witness := Witness.ofRefs [v],
       detail := "citizen voted twice" })
   let quorum : List Violation :=
     if voidCycle? s then
-      [{ eca := "quorum", witnessCitizen := none, witnessCandidate := none,
-         detail := s!"quorum failed: {(votersOf s).length} voted of {s.citizens.length}, repeat on day {electionDayK ((curIdx s) + 1)}" }]
+      [{ eca := "quorum"
+         , witness := Witness.withCounts (absentees s)
+             [("voted", (votersOf s).length), ("total", s.citizens.length)]
+         , detail := s!"quorum failed: {(votersOf s).length} voted of {s.citizens.length}, repeat on day {electionDayK ((curIdx s) + 1)}" }]
     else []
   dist ++ dupes ++ quorum
 
