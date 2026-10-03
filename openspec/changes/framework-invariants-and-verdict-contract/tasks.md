@@ -23,7 +23,7 @@
 - [x] 3.1 Rework `artefacts/mayor-2027/rules.lean` to derive its typed state from the instance graph instead of a bespoke JSON snapshot, and verify a full 2027 cycle still resolves end to end
 - [x] 3.2 Rework `artefacts/mayor-quorum/rules.lean` the same way, representing the ongoing and void election instances as individuals of one Process class distinguished by `temporallyFinishedBy`, and verify the repeat chain still appends preserving prior instances
 - [ ] 3.3 Replace positional ordering with declared ordering properties on process instances and calendar points, and verify no rule still depends on list position to find the current instance
-- [ ] 3.4 Verify `apply` returns a whole graph that replaces the stored one, and that a returned subject typed by an undeclared class is rejected before any write is committed
+- [x] 3.4 Verify `apply` returns a whole graph that replaces the stored one, and that a returned subject typed by an undeclared class is rejected before any write is committed
 - [x] 3.5 Support a law minting `ph:CalendarPoint` and `ph:CalendarSpan` individuals into the runtime graph during `apply`, carrying the same declared properties as seeded ones with dates computed only by Lean, and verify the quorum repeat's new election resolves a date through a minted span
 - [x] 3.6 Update `scripts/snapshot_roundtrip.py`, `scripts/test_oracle.py`, `scripts/test_quorum.py`, and `scripts/test_conformance.py` to the graph wire format and verify all three suites still pass
 

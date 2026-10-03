@@ -22,6 +22,7 @@ from .graphwire import dumps, graph_to_wire, load_artefact_case, wire_to_graph
 
 PH = "https://potato-hamlet.example/ontology/"
 XSD = "http://www.w3.org/2001/XMLSchema#"
+GFO = ("https://w3id.org/gfo-light/", "https://w3id.org/gfo-core/")
 RDF_TYPE = URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
 
 
@@ -74,20 +75,35 @@ class OracleClient:
 
     # -- graph plumbing -------------------------------------------------
     def replace(self, graph: Graph) -> None:
-        """Adopt a whole graph, refusing undeclared subjects before commit."""
-        for subject in graph.subjects(RDF_TYPE, None):
+        """Adopt a whole graph, refusing anything undeclared before commit.
+
+        The store is replaced rather than merged, so this is the only place a
+        returned graph is inspected. Validation runs to completion BEFORE a
+        single triple is written: a partial write is exactly what wholesale
+        replacement exists to prevent, and a graph the oracle half-returned
+        would leave the consumer believing a transition that never finished.
+
+        A subject is acceptable when it carries at least one rdf:type, and
+        every ph: type among them is one this ontology declares. GFO
+        categories are legitimate for a grounded framework -- a Chronoid is a
+        gfo-light:Chronoid, not a ph: one -- so only the ph: vocabulary is
+        governed here.
+        """
+        for subject in sorted({s for s in graph.subjects() if isinstance(s, URIRef)}):
             if not str(subject).startswith(PH):
                 continue
-            declared = graph.value(subject, RDF_TYPE)
-            # GFO categories are legitimate for a grounded framework (a
-            # Chronoid is a gfo-light:Chronoid, not a ph: one); only the
-            # ph: vocabulary is governed by this law's ontology.
-            if declared is not None and str(declared).startswith(PH) \
-                    and str(declared) not in self.declared_types:
+            types = [o for o in graph.objects(subject, RDF_TYPE) if isinstance(o, URIRef)]
+            if not types:
                 raise UndeclaredSubject(
-                    f"apply returned {subject} typed by {declared}, "
-                    f"which the ontology does not declare"
+                    f"apply returned {subject} carrying no rdf:type, so a consumer "
+                    f"cannot tell what it is"
                 )
+            for declared in types:
+                if str(declared).startswith(PH) and str(declared) not in self.declared_types:
+                    raise UndeclaredSubject(
+                        f"apply returned {subject} typed by {declared}, "
+                        f"which the ontology does not declare"
+                    )
         self.graph.remove((None, None, None))
         for triple in graph:
             self.graph.add(triple)
