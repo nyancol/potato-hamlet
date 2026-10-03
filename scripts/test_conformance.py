@@ -286,6 +286,59 @@ def main(argv: list[str]) -> int:
                    "1 voted of 3" in quorum["detail"]
                    and counts.get("voted") == 1, quorum["detail"])
 
+    # ---- process attribution: every duty names the instance it belongs to --
+    # Without it, two duties that look alike are indistinguishable and a
+    # consumer cannot group them under the process they serve.
+    # At the seed, where duties exist. Checking at a driven-forward state would
+    # be vacuous for the flat law, which has nothing pending once counted.
+    seed = fresh()
+    entries = [e for es in seed.check().get("pending", {}).values() for e in es]
+    expect("every pending entry names a process instance",
+           bool(entries) and all(e.get("process") for e in entries), str(entries))
+    expect("the named instance is in the graph",
+           all(URIRef(e["process"]) in seed.graph.subjects(RDF.type, None)
+               for e in entries), str([e.get("process") for e in entries]))
+    expect("the named instance is typed by a class the ontology declares",
+           all(
+               any(str(t) in _declared_classes(case)
+                   for t in seed.graph.objects(URIRef(e["process"]), RDF.type))
+               for e in entries
+           ),
+           str([e["process"] for e in entries]))
+
+    if "repeat" in by_id:  # the quorum flavour, where instances accumulate
+        # After a repeat the graph holds two instances, and no duty may name the
+        # finished one: it is history, and history is visible to past-dependent
+        # rules rather than something a fresh duty is owed on.
+        r = fresh()
+        for who in (A, B, C):
+            r.set_time(0)
+            try:
+                r.apply({"eca": "announce"})
+            except OracleRejected:
+                pass
+            r.apply({"eca": "nominate", "citizen": who})
+        r.set_time(9)
+        r.apply({"eca": "prepare"})
+        r.set_time(10, 12)
+        e = next(x for es in r.check()["pending"].values() for x in es if x["eca"] == "vote")
+        r.apply({"eca": "vote", "voter": A, "candidate": e["choices"]["candidate"][0]})
+        r.set_time(10, 20)
+        r.apply({"eca": "count"})
+        before = [x for _cit, es in r.check()["pending"].items() for x in es]
+        expect("before the repeat, duties name the cycle that is current",
+               bool(before) and len({x["process"] for x in before}) == 1,
+               str([(x["eca"], x["process"]) for x in before]))
+        r.apply({"eca": "repeat"})
+        instances = r.cycles()
+        expect("the repeat leaves two instances in the graph",
+               len(instances) == 2, str(instances))
+        r.set_time(40, 10)
+        after = [x for _cit, es in r.check()["pending"].items() for x in es]
+        expect("after the repeat, duties name the new instance and never the finished one",
+               all(x["process"] == instances[-1] for x in after),
+               str([(x["eca"], x["process"]) for x in after]))
+
     print(f"\n{'all pass' if not fails else f'{len(fails)} FAILURES: {fails}'}")
     return 1 if fails else 0
 

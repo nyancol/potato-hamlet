@@ -170,12 +170,21 @@ structure Snapshot where
   mayorId : Option String
 deriving Repr, DecidableEq
 
-/-- One duty owed by one citizen. `choices` names the options available at
-    this instant for any parameter the manifest sources from `choices`, so a
-    consumer can build a complete act without reading law-specific state. -/
+/-- One duty owed by one citizen, on one process instance.
+
+    `process` names the instance the duty belongs to, so a consumer can group
+    duties under the process they serve and two duties that look alike are not
+    mistaken for the same one. `choices` names the options available at this
+    instant for any parameter the manifest sources from `choices`, so a
+    consumer can build a complete act without reading law-specific state.
+
+    In the flat shape there is a single named instance, so `process` is
+    constant; the history shape resolves it per entry, and it may not be the
+    instance a past-dependent duty arose from. -/
 structure PendingEntry where
   citizen : String
   eca : String
+  process : String
   choices : List (String × List String)
 deriving Repr, DecidableEq
 
@@ -357,7 +366,8 @@ instance : ToJson Violation where
 
 /-- A pending entry as JSON: the ECA plus any parameter choices. -/
 def pendingEntryJson (p : PendingEntry) : Json :=
-  let base : List (String × Json) := [("eca", toJson p.eca)]
+  let base : List (String × Json) :=
+    [("eca", toJson p.eca), ("process", toJson p.process)]
   let pairs : List (String × Json) :=
     p.choices.map (fun kv => (kv.1, Json.arr (kv.2.toArray.map (fun v => toJson v))))
   let choicesJson : Json := Json.mkObj pairs
@@ -661,19 +671,19 @@ def pendingOf (s : Snapshot) : List PendingEntry :=
   let authPending : List PendingEntry := match authorityId s with
     | none => []
     | some a =>
-      (if announceDue? s then [{ citizen := a, eca := "announce", choices := [] }] else []) ++
-      (if prepareDue? s then [{ citizen := a, eca := "prepare", choices := [] }] else []) ++
-      (if countDue? s then [{ citizen := a, eca := "count", choices := [] }] else []) ++
-      (if proclaimDue? s then [{ citizen := a, eca := "proclaim", choices := [] }] else [])
+      (if announceDue? s then [{ citizen := a, eca := "announce", process := iriElection, choices := [] }] else []) ++
+      (if prepareDue? s then [{ citizen := a, eca := "prepare", process := iriElection, choices := [] }] else []) ++
+      (if countDue? s then [{ citizen := a, eca := "count", process := iriElection, choices := [] }] else []) ++
+      (if proclaimDue? s then [{ citizen := a, eca := "proclaim", process := iriElection, choices := [] }] else [])
   let nominees : List PendingEntry :=
     if nominateOpen? s then
       (s.citizens.filter (fun c => !(s.registry.any (· == c.id)))).map
-        (fun c => { citizen := c.id, eca := "nominate", choices := [] })
+        (fun c => { citizen := c.id, eca := "nominate", process := iriElection, choices := [] })
     else []
   let voters : List PendingEntry :=
     if pollsOpen? s then
       (s.citizens.filter (fun c => decide (!(voted? s c.id)))).map
-        (fun c => { citizen := c.id, eca := "vote",
+        (fun c => { citizen := c.id, eca := "vote", process := iriElection,
                        choices := [("candidate", s.candidates)] })
     else []
   authPending ++ nominees ++ voters

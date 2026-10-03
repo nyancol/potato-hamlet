@@ -37,8 +37,9 @@
 
 - [x] 5.1 Replace `wouldWin` with a generic `readings` list in both rule sets, carrying a law-chosen id, a kind from `decimal`/`ref`/`flag`, and a value, with `ref` naming the ontology class, and verify a law with no result emits no placeholder entry
 - [x] 5.2 Add parameter slots to `pending` in both rule sets carrying the choices available at that instant, and verify a pending vote entry names the candidates selectable by the acting citizen
-- [ ] 5.3 Add the process instance IRI to each `pending` entry in both rule sets, and verify a duty resolves to the instance it belongs to in both the flat and cycle-history shapes
+- [x] 5.3 Add the process instance IRI to each `pending` entry in both rule sets, and verify a duty resolves to the instance it belongs to in both the flat and cycle-history shapes
 - [ ] 5.4 Verify a duty on a multi-instance process type takes a parameter sourced from `choices` over the open instances, and that an act naming a chosen instance is accepted while one naming an unknown instance is rejected with a named guard
+  - Untestable with the shipped laws, as the proposal already notes: this needs a process TYPE with two ongoing instances at once, and both laws run one cycle at a time (quorum's repeats are strictly sequential). 5.3 delivers the attribution it rides on. The related loose guard -- a vote accepts a `ph:CandidateRole` IRI where a citizen belongs, because the guard checks membership of the registry rather than that the value is a Citizen -- is a genuine defect and belongs here when a second instance type exists to test against.
 - [x] 5.5 Give violations a structured witness of `refs` and named `counts`, replacing the flattened `witnessCitizen`/`witnessCandidate` fields, and verify the quorum failure reports voted and total as counts rather than only inside `detail`
 - [x] 5.6 Declare a `readings` block (id, class, label, template) in both manifests covering every reading the oracle emits, and verify no emitted reading lacks a declaration
 
