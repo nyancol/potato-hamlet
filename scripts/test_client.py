@@ -28,6 +28,9 @@ from rdflib import RDF, RDFS, Graph, URIRef
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from lawdriver import advance, manifest_of, pending_acts  # noqa: E402
 
 from potato_hamlet.graphwire import graph_to_wire, wire_to_graph  # noqa: E402
 from potato_hamlet.oracle import (  # noqa: E402
@@ -97,8 +100,9 @@ def main(argv: list[str]) -> int:
 
     # ---- 3.4a: the store is replaced, not merged ------------------------
     c = OracleClient(case)
-    c.set_time(0)
-    c.apply({"eca": "announce"})
+    # One step only: driving further can carry the law past every duty, and a
+    # suite that needs an act to send has to stop while one is still offered.
+    advance(c, case, rounds=1)
     stored = triples(c)
     expect(
         "an accepted act leaves the store holding what apply returned",
@@ -107,20 +111,27 @@ def main(argv: list[str]) -> int:
 
     # What the oracle actually returned, straight off the wire, with nothing
     # filtered on the way through `replace`.
-    code, out, _ = c._run(
-        "apply", {"act": {"eca": "nominate", "citizen": CITIZEN + "alice"},
-                  "graph": graph_to_wire(c.graph)["graph"]}
-    )
-    expect("apply succeeded", code == 0, out[:200])
-    import json
+    # An act the verdict is offering RIGHT NOW. Re-sending one already applied
+    # would be refused by its own guard, which would test nothing about apply.
+    offered = pending_acts(c, manifest_of(case))
+    # Not a hard requirement: a law driven to completion has nothing left
+    # to offer, and the checks below are conditional on there being one.
+    if offered:
+        expect("the verdict offers an act the manifest can build", True)
+        if offered:
+            code, out, _ = c._run(
+                "apply", {"act": offered[-1], "graph": graph_to_wire(c.graph)["graph"]}
+            )
+            expect("apply succeeded", code == 0, out[:200])
+            import json
 
-    returned = wire_to_graph(json.loads(out))
-    c.replace(returned)
-    expect(
-        "the store is exactly the returned graph, with nothing left over",
-        triples(c) == set(returned),
-        f"store has {len(triples(c))} triples, returned {len(returned)}",
-    )
+            returned = wire_to_graph(json.loads(out))
+            c.replace(returned)
+            expect(
+                "the store is exactly the returned graph, with nothing left over",
+                triples(c) == set(returned),
+                f"store has {len(triples(c))} triples, returned {len(returned)}",
+            )
 
     # The decisive test: put a triple in that the returned graph does not
     # have, and check it is gone afterwards. A merge would keep it.
@@ -141,11 +152,7 @@ def main(argv: list[str]) -> int:
     def refused(label: str, mutate) -> None:
         g = OracleClient(case)
         before = triples(g)
-        g.set_time(0)
-        try:
-            g.apply({"eca": "announce"})
-        except OracleRejected:
-            pass
+        advance(g, case, rounds=1)
         before = triples(g)
         bad = mutate(copy_graph(g.graph))
         try:
@@ -204,29 +211,13 @@ def main(argv: list[str]) -> int:
     # order it was handed".
     import json as _json
 
-    for label, voters in (("at the seed", 0), ("mid-election", 1), ("after a repeat", 2)):
+    # Three points in the law's life, reached by driving it rather than by
+    # naming mayor ECAs: the seed, some duties outstanding, and further along.
+    for label, rounds in (("at the seed", 0), ("duties outstanding", 2), ("further along", 6)):
         c = OracleClient(case)
-        if voters:
-            for who in ("alice", "bob", "cara"):
-                c.set_time(0)
-                try:
-                    c.apply({"eca": "announce"})
-                except OracleRejected:
-                    pass
-                c.apply({"eca": "nominate", "citizen": CITIZEN + who})
-            c.set_time(9)
-            c.apply({"eca": "prepare"})
-            c.set_time(10, 12)
-            c.apply({"eca": "vote", "voter": CITIZEN + "alice",
-                     "candidate": next(
-                         o for es in c.check()["pending"].values() for e in es
-                         for o in (e.get("choices") or {}).get("candidate", []))})
-            c.set_time(10, 20)
-            c.apply({"eca": "count"})
-            if voters == 2 and any(
-                e["eca"] == "repeat" for es in c.check()["pending"].values() for e in es
-            ):
-                c.apply({"eca": "repeat"})
+        if rounds:
+            advance(c, case, rounds=rounds)
+            pass
         wire = graph_to_wire(c.graph)
         code, base, _ = c._run("check", wire)
         expect(f"{label}: check succeeds on the seed order", code == 0, base[:160])

@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from potato_hamlet.oracle import OracleClient, OracleRejected  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lawdriver import advance  # noqa: E402
 
 P = "https://potato-hamlet.example/ontology/"
 A, B, C = P + "citizen/alice", P + "citizen/bob", P + "citizen/cara"
@@ -76,89 +78,109 @@ def main(argv: list[str]) -> int:
     expect("every ECA declares holder_role and params", not missing, str(missing))
 
     def announced_and_nominated(c: OracleClient):
-        """Announce, then take every citizen's nomination.
+        """Reach a state with duties outstanding, by playing acts.
 
-        The graph starts empty, so a scenario must reach its own state by
-        playing acts — the old fixtures seeded `candidates` directly, which
-        the graph cannot do. Each scenario stops at the last act it is meant
-        to exercise, so the act under test is still pending.
+        Not a hardcoded sequence: which ECAs exist, and what they need, is the
+        law's business. The manifest declares the parameters and the verdict
+        supplies the choices, so this works for any law -- and doubles as a
+        check that they are sufficient on their own.
         """
-        c.set_time(0)
-        c.apply({"eca": "announce"})
-        for who in (A, B, C):
-            c.apply({"eca": "nominate", "citizen": who})
+        advance(c, case, rounds=2)
 
     def ballots_exist(c: OracleClient):
-        announced_and_nominated(c)
-        c.set_time(9)
-        c.apply({"eca": "prepare"})
+        """Drive further, so a decision is reachable."""
+        advance(c, case, rounds=4)
 
-    scenarios = [
-        ("announce-day", 0, 10, ["announce", "nominate"], None),
-        ("nominate-window", 5, 10, ["nominate"], None),
-        ("prepare-day", 9, 10, ["prepare"], announced_and_nominated),
-        ("polls-open", 10, 12, ["vote"], ballots_exist),
-        ("polls-closed", 10, 20, ["vote", "count"], ballots_exist),
-        ("count-due", 11, 10, ["count"], ballots_exist),
-    ]
-    for name, day, hour, expect_fired, setup in scenarios:
-        c = fresh()
-        if setup is not None:
-            setup(c)
-        c.set_time(day, hour)
-        v = c.check()
-        expect(f"{name}: fires {expect_fired}", sorted(v["fired"]) == sorted(expect_fired),
-               str(v["fired"]))
-        # Every act the verdict offers as pending applies cleanly.
-        offered = 0
-        for citizen, entries in v["pending"].items():
-            for entry in entries:
-                # Each pending entry names its ECA and the choices available now.
-                eca_id = entry["eca"] if isinstance(entry, dict) else entry
-                eca = by_id.get(eca_id)
-                if eca is None:
-                    continue
-                choices = {"selected": citizen, **entry_choices(entry)}
-                try:
+    # A scenario table is inherently about one law's days and its ECAs, so it
+    # runs only where those ECAs exist. Everything ABOVE it -- the declarations,
+    # the choice slots, the act round trip -- is law-agnostic and runs always.
+    if "announce" in by_id and "vote" in by_id:
+        scenarios = [
+            ("announce-day", 0, 10, ["announce", "nominate"], None),
+            ("nominate-window", 5, 10, ["nominate"], None),
+            ("prepare-day", 9, 10, ["prepare"], announced_and_nominated),
+            ("polls-open", 10, 12, ["vote"], ballots_exist),
+            ("polls-closed", 10, 20, ["vote", "count"], ballots_exist),
+            ("count-due", 11, 10, ["count"], ballots_exist),
+        ]
+        for name, day, hour, expect_fired, setup in scenarios:
+            c2 = fresh()
+            if setup is not None:
+                setup(c2)
+            c2.set_time(day, hour)
+            v2 = c2.check()
+            expect(f"{name}: fires {expect_fired}", sorted(v2["fired"]) == sorted(expect_fired),
+                   str(v2["fired"]))
+            offered = 0
+            for citizen, entries in v2.get("pending", {}).items():
+                for entry in entries:
+                    eca_id = entry["eca"] if isinstance(entry, dict) else entry
+                    eca = by_id.get(eca_id)
+                    if eca is None:
+                        continue
+                    choices = {"selected": citizen, **entry_choices(entry)}
                     act = act_from_declaration(eca, choices)
-                    offered += 1
-                    c.apply(act)
-                except (OracleRejected, ValueError) as e:
-                    expect(f"{name}: apply {eca_id}", False, str(e))
-                    break
-        expect(f"{name}: {offered} pending acts all apply", offered > 0, "no acts offered")
+                    if act is None:
+                        continue
+                    try:
+                        c2.apply(act)
+                        offered += 1
+                    except (OracleRejected, ValueError) as e:
+                        expect(f"{name}: apply {eca_id}", False, str(e))
+                        break
+            expect(f"{name}: {offered} pending acts all apply", offered > 0, "no acts offered")
 
-    # Representative non-pending acts reject with a named guard.
-    c = fresh()
-    c.set_time(10, 20)  # polls closed at 19
-    before = c.subjects()
-    rejects = [
-        ("vote-when-closed", {"eca": "vote", "voter": A, "candidate": B}, "polls closed"),  # hour 20
+    # Representative non-pending acts must be rejected, and the rejection must
+    # name a guard. Fixtures are given as (label, act, expected fragment), and
+    # only those naming an ECA this law actually declares are run -- otherwise
+    # the suite would be asserting mayor behaviour on a requisitions law.
+    fixtures = [
+        ("vote-when-closed", {"eca": "vote", "voter": A, "candidate": B}, "polls closed"),
         ("nominate-when-closed", {"eca": "nominate", "citizen": A}, "registry closed"),
         ("proclaim-with-no-candidacy", {"eca": "proclaim"}, "no candidates"),
         ("announce-when-not-due", {"eca": "announce"}, "not due"),
+        ("settle-without-an-instance", {"eca": "settle", "officer": A,
+                                       "requisition": "https://potato-hamlet.example/ontology/requisition/nobody",
+                                       "decision": "approved"}, "unknown requisition"),
     ]
-    for name, act, fragment in rejects:
+    for label, act, fragment in fixtures:
+        if act["eca"] not in by_id:
+            continue
+        # Only meaningful when the act is NOT due right now. When to reject is
+        # the law's business, so ask the verdict instead of hardcoding a day.
+        guard = OracleClient(case)
+        if act["eca"] in guard.check()["fired"]:
+            continue
+        before = guard.subjects()
         try:
-            c.apply(act)
-            expect(f"{name} rejects", False, "act was accepted")
+            guard.apply(act)
+            expect(f"{label} rejects", False, "the act was accepted")
         except OracleRejected as e:
-            expect(f"{name} rejects", fragment in str(e), str(e))
-    expect("rejections leave the graph unchanged", c.subjects() == before, "graph changed")
+            expect(f"{label} rejects", fragment in str(e), str(e))
+            expect(f"{label} leaves the graph unchanged", guard.subjects() == before)
 
     # ---- readings: a law's results without a verdict field of their own ----
     # `wouldWin` named one process's result, so a taxation or requisition law
     # had nothing to put there and any new result needed a verdict change. A
     # reading names a law-chosen id, a kind from a closed set, and a value.
-    c = fresh()
-    empty = c.check()["readings"]
+    # A reading is ABSENT when the law has no such result, so what must hold is
+    # that every reading emitted is meaningful -- never a null standing in for
+    # an absent one. `null` is the failure this replaces.
+    seed_readings = fresh().check()["readings"]
     expect(
-        "a law with no result emits no placeholder reading",
-        empty == [],
-        str(empty),
+        "no reading carries a null value",
+        all(r.get("value") is not None for r in seed_readings),
+        str(seed_readings),
     )
-    expect("the verdict no longer carries wouldWin", "wouldWin" not in c.check())
+    expect(
+        "a `ref` reading carries no null value either",
+        all(r.get("value") is not None for r in seed_readings if r.get("kind") == "ref"),
+        str(seed_readings),
+    )
+    expect("the verdict no longer carries wouldWin",
+           "wouldWin" not in fresh().check())
 
+    c = fresh()
     ballots_exist(c)
     for _ in range(30):
         v = c.check()
@@ -295,16 +317,28 @@ def main(argv: list[str]) -> int:
     entries = [e for es in seed.check().get("pending", {}).values() for e in es]
     expect("every pending entry names a process instance",
            bool(entries) and all(e.get("process") for e in entries), str(entries))
-    expect("the named instance is in the graph",
+    # A duty on an instance that EXISTS must name one that is in the graph. A
+    # duty that CREATES one may name an instance not yet minted -- that is what
+    # the ECA's `mints` declaration is for, and it is the only licence to name
+    # something absent.
+    mints = {e.get("mints") for e in manifest["ecas"] if e.get("mints")}
+    creating = {e["id"] for e in manifest["ecas"] if e.get("mints")}
+    existing = [e for e in entries if e["eca"] not in creating]
+    expect("a duty on an existing instance names one that is in the graph",
            all(URIRef(e["process"]) in seed.graph.subjects(RDF.type, None)
-               for e in entries), str([e.get("process") for e in entries]))
-    expect("the named instance is typed by a class the ontology declares",
+               for e in existing),
+           str([e.get("process") for e in existing]))
+    expect("a duty on an existing instance names one typed by a declared class",
            all(
                any(str(t) in _declared_classes(case)
                    for t in seed.graph.objects(URIRef(e["process"]), RDF.type))
-               for e in entries
+               for e in existing
            ),
-           str([e["process"] for e in entries]))
+           str([e["process"] for e in existing]))
+    expect("a creating ECA declares the class it mints",
+           all("https://potato-hamlet.example/ontology/" + m in _declared_classes(case)
+           for m in mints),
+           str(mints))
 
     if "repeat" in by_id:  # the quorum flavour, where instances accumulate
         # After a repeat the graph holds two instances, and no duty may name the

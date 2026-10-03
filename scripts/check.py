@@ -37,6 +37,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lawdriver import act_from_declaration, play_forward  # noqa: E402
+
 import yaml
 from rdflib import OWL, RDF, RDFS, Graph, Namespace, URIRef
 
@@ -703,71 +706,6 @@ def _reset(client):
     fresh = OracleClient(client.case)
     client.graph = fresh.graph
     return client
-
-
-def act_from_declaration(eca: dict, entry: dict, citizen: str) -> dict | None:
-    """Build a complete act from the manifest's declarations, or None.
-
-    The manifest names each parameter's Role and where its value comes from:
-    `selected` means the citizen the verdict offered it to, `choices` means
-    an option from the entry's own choice slots. If either runs dry there is
-    no complete act to offer and the entry is skipped.
-    """
-    act: dict = {"eca": eca["id"]}
-    choices = entry.get("choices") or {}
-    for prm in eca.get("params") or []:
-        if prm.get("source") == "selected":
-            act[prm["name"]] = citizen
-        else:
-            options = choices.get(prm["name"]) or []
-            if not options:
-                return None
-            act[prm["name"]] = options[0]
-    return act
-
-
-def play_forward(client, by_id: dict, limit: int = 40) -> tuple[list[dict], list[str]]:
-    """Take whatever the verdict offers until nothing applies.
-
-    Law-agnostic: acts are built from the manifest's declarations with values
-    from the verdict's own choice slots, so nothing here knows which law it is
-    driving. Returns the acts applied, and any subject-monotonicity failure
-    seen on the way -- erasure being prohibited either way.
-    """
-    from potato_hamlet.oracle import OracleRejected
-
-    applied: list[dict] = []
-    losses: list[str] = []
-    seen = client.subjects()
-    for _ in range(limit):
-        moved = False
-        for citizen, entries in (client.check().get("pending") or {}).items():
-            for entry in entries:
-                eca_id = entry.get("eca") if isinstance(entry, dict) else entry
-                eca = by_id.get(eca_id)
-                if eca is None:
-                    continue
-                act = act_from_declaration(eca, entry, citizen)
-                if act is None:
-                    continue
-                try:
-                    client.apply(act)
-                    applied.append(act)
-                    moved = True
-                except OracleRejected:
-                    continue
-                break
-            if moved:
-                break
-        if not moved:
-            break
-        now = client.subjects()
-        for gone in sorted(seen - now):
-            losses.append(f"after {applied[-1]['eca']}: <{gone}>")
-        if losses:
-            break
-        seen |= now
-    return applied, losses
 
 
 def _manifest_of(case: Path) -> tuple[dict, list[str]]:
