@@ -20,6 +20,16 @@ ecas:
   label: Lodge a requisition
   message: '{citizen} may lodge one requisition at a time'
   modality: may
+- id: withdraw
+  eca_process: WithdrawRequisition
+  holder_role: RequisitionerRole
+  params:
+  - name: citizen
+    role: RequisitionerRole
+    source: selected
+  label: Withdraw a requisition
+  message: '{citizen} may withdraw their own open requisition'
+  modality: may
 - id: settle
   eca_process: SettleRequisition
   holder_role: OfficerRole

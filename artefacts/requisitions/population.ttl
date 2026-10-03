@@ -40,21 +40,26 @@
   ph:atHour 10 .
 
 # --- Calendar. atDate is display-only; the oracle owns day arithmetic.
-# Lodging is a WINDOW (days 0 to 14) because a requisition may be lodged on
-# any day of the cycle; settling is a POINT because it happens at the
-# deadline, or never.
+# One window bounds the requisition's whole life: it opens on day 0 and closes
+# on day 30. Settling happens at the deadline on day 14, which is a POINT and
+# lies INSIDE that window -- so a requisition ended by settling ends at a
+# declared calendar moment, while one ended by withdrawal part-way through
+# consideration ends at a moment that is not one. Both record the same way.
 
-<https://potato-hamlet.example/ontology/calendar/2027/lodging> a ph:CalendarSpan ;
-  ph:label "Lodging window, Jan 2 to Jan 16" ;
+<https://potato-hamlet.example/ontology/calendar/2027/window> a ph:CalendarSpan ;
+  ph:label "Requisition window, Jan 2 to Feb 1" ;
   ph:dayIndex 0 ;
   ph:marksPhase ph:LodgeRequisition ;
+  ph:marksPhase ph:ConsiderRequisition ;
+  ph:marksPhase ph:WithdrawRequisition ;
+  ph:marksPhase ph:Requisition ;
   gfo-core:temporallyStartedBy
     <https://potato-hamlet.example/ontology/calendar/2027/opens> ;
   gfo-core:temporallyFinishedBy
-    <https://potato-hamlet.example/ontology/calendar/2027/deadline> .
+    <https://potato-hamlet.example/ontology/calendar/2027/closes> .
 
 <https://potato-hamlet.example/ontology/calendar/2027/opens> a ph:CalendarPoint ;
-  ph:label "Cycle opens, Jan 2" ;
+  ph:label "Window opens, Jan 2" ;
   ph:atDate "2027-01-02"^^xsd:date ;
   ph:dayIndex 0 ;
   ph:atHour 9 .
@@ -65,6 +70,12 @@
   ph:dayIndex 14 ;
   ph:atHour 18 ;
   ph:marksPhase ph:SettleRequisition .
+
+<https://potato-hamlet.example/ontology/calendar/2027/closes> a ph:CalendarPoint ;
+  ph:label "Window closes, Feb 1" ;
+  ph:atDate "2027-02-01"^^xsd:date ;
+  ph:dayIndex 30 ;
+  ph:atHour 18 .
 
 # --- Process situations, so the verdict's `phase` resolves by IRI ---
 

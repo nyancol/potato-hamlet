@@ -6,9 +6,12 @@ POTATO HAMLET — PURCHASE REQUISITIONS
 2. A citizen may hold no more than one open requisition at a time. Lodging a
    second while the first is open shall be refused.
 
-3. A requisition may be withdrawn by the citizen who lodged it, at any time
-   before it is decided. Withdrawal closes the requisition; it does not erase
-   it, and it stays in the record as withdrawn.
+3. A requisition may be withdrawn by the citizen who lodged it at any time
+   before it is decided, including after the fourteenth day has passed. A
+   withdrawal therefore commonly ends a requisition part-way through its
+   consideration window rather than at the deadline. Withdrawal closes the
+   requisition; it does not erase it, and it stays in the record as
+   withdrawn.
 
 4. The Requisition Officer shall decide every open requisition on or before
    the fourteenth day. The Officer shall either

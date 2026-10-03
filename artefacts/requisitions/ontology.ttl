@@ -133,7 +133,11 @@ ph:recordOf a owl:ObjectProperty ;
 
 # ------------------------------------------------------------------
 # Declared process hierarchy
-# Each requisition runs through lodging and settling. Those two ARE
+# The consideration window also marks ph:Requisition itself, which is what makes
+# "this instance ended inside one of its calendar spans" a statement about the
+# graph rather than about its phases.
+#
+# Each requisition runs through lodging, consideration, withdrawal and settling. Those two ARE
 # time-scoped, so both are marked by a calendar node; the requisition that
 # contains them is not.
 # ------------------------------------------------------------------
@@ -145,6 +149,8 @@ ph:recordOf a owl:ObjectProperty ;
 # phase of a cycle would assert a shared bound it does not have.
 ph:Requisition rdfs:subClassOf gfo-core:Process .
 ph:LodgeRequisition rdfs:subClassOf gfo-core:Process .
+ph:ConsiderRequisition rdfs:subClassOf gfo-core:Process .
+ph:WithdrawRequisition rdfs:subClassOf gfo-core:Process .
 ph:SettleRequisition rdfs:subClassOf gfo-core:Process .
 
 # The states a requisition moves through. Declared so `phase` is resolvable by
@@ -155,7 +161,12 @@ ph:RequisitionRefused rdfs:subClassOf gfo-core:State .
 ph:RequisitionWithdrawn rdfs:subClassOf gfo-core:State .
 ph:RequisitionLate rdfs:subClassOf gfo-core:State .
 
+# Lodging and consideration are windows, so both are marked by the same
+# CalendarSpan. Withdrawal is available throughout the window, so it shares
+# that mark. Settling happens at the deadline or never, so it is a point.
 ph:Requisition ph:hasPhase ph:LodgeRequisition ,
+                                   ph:ConsiderRequisition ,
+                                   ph:WithdrawRequisition ,
                                    ph:SettleRequisition .
 
 # ------------------------------------------------------------------
@@ -169,6 +180,13 @@ ph:Requisition ph:hasPhase ph:LodgeRequisition ,
 # ------------------------------------------------------------------
 
 ph:LodgeRequisition ph:hasParticipant ph:RequisitionerRole .
+
+ph:ConsiderRequisition ph:hasParticipant ph:RequisitionerRole ,
+                                            ph:OfficerRole .
+
+# Withdrawal is the requester's alone. No choices parameter: clause 2 allows a
+# citizen one open requisition at a time, so the citizen already determines it.
+ph:WithdrawRequisition ph:hasParticipant ph:RequisitionerRole .
 
 ph:SettleRequisition ph:hasParticipant ph:OfficerRole ,
                                          ph:RequisitionerRole .
