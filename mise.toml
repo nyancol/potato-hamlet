@@ -1,0 +1,5 @@
+[tools]
+"npm:@fission-ai/openspec" = "1.13.2"
+"npm:firecrawl-cli" = "1.24.6"
+"uv" = "0.12.19"
+"github:leanprover/elan" = "latest"

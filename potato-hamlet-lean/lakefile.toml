@@ -1,0 +1,17 @@
+name = "potato-hamlet-lean"
+version = "0.1.0"
+defaultTargets = ["potato-hamlet-lean"]
+
+[[lean_lib]]
+name = "PotatoHamletLean"
+
+[[lean_exe]]
+name = "potato-hamlet-lean"
+root = "Main"
+
+[[lean_lib]]
+name = "RulesCase"
+
+[[lean_exe]]
+name = "oracle"
+root = "OracleMain"

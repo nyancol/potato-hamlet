@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Potato Hamlet build output — oracles are rebuilt by scripts/build_oracle.py
+# and scripts/freeze.py records their hash, so the binaries are not source.
+artefacts/*/oracle
+potato-hamlet-lean/.lake/
+potato-hamlet-lean/build/

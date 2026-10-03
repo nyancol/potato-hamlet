@@ -1,0 +1,125 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Seed instances for mayor-2027. Individuals only — the schema lives in
+# ontology.ttl. Loaded into the runtime graph at session start.
+#
+# Full IRIs in angle brackets because "/" is not valid in a Turtle prefixed
+# name: ph:citizen/alice is the prefixed reading of
+# <https://potato-hamlet.example/ontology/citizen/alice>.
+
+# --- Population (every citizen carries ph:label and ph:age) ---
+
+<https://potato-hamlet.example/ontology/citizen/alice> a ph:Citizen ;
+  ph:label "Alice" ;
+  ph:age 71 .
+
+<https://potato-hamlet.example/ontology/citizen/bob> a ph:Citizen ;
+  ph:label "Bob" ;
+  ph:age 54 .
+
+<https://potato-hamlet.example/ontology/citizen/cara> a ph:Citizen ;
+  ph:label "Cara" ;
+  ph:age 43 .
+
+<https://potato-hamlet.example/ontology/hamlet> a ph:Hamlet ;
+  ph:label "Potato Hamlet" .
+
+# --- Clock: the current simulated position ---
+
+<https://potato-hamlet.example/ontology/clock/now> a ph:Clock ;
+  ph:label "Now" ;
+  ph:dayIndex 0 ;
+  ph:atHour 0 .
+
+# --- Calendar: cycle day 0 is announce, 9 prepare, 10 election (Jan 12).
+# atDate is display-only; the oracle owns day arithmetic. ---
+
+<https://potato-hamlet.example/ontology/calendar/2027/announce> a ph:CalendarPoint ;
+  ph:label "Announce, Jan 2" ;
+  ph:atDate "2027-01-02"^^xsd:date ;
+  ph:dayIndex 0 ;
+  ph:marksPhase ph:AnnounceElection .
+
+<https://potato-hamlet.example/ontology/calendar/2027/prepare> a ph:CalendarPoint ;
+  ph:label "Prepare, Jan 11" ;
+  ph:atDate "2027-01-11"^^xsd:date ;
+  ph:dayIndex 9 ;
+  ph:marksPhase ph:CreateBallots .
+
+<https://potato-hamlet.example/ontology/calendar/2027/election> a ph:CalendarPoint ;
+  ph:label "Election, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:marksPhase ph:CastVote .
+
+# --- Counting and proclamation are due at one moment: the polls closing.
+# Counting is due at that hour; proclamation is due the instant counting
+# completes, which is the same node. One point marks both phases rather
+# than the schedule being written twice.
+
+<https://potato-hamlet.example/ontology/calendar/2027/polls-close> a ph:CalendarPoint ;
+  ph:label "Polls close, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:atHour 19 ;
+  ph:marksPhase ph:CountVotes ;
+  ph:marksPhase ph:ProclaimMayor .
+
+<https://potato-hamlet.example/ontology/calendar/2027/nomination> a ph:CalendarSpan ;
+  ph:label "Nomination window, Jan 2 to Jan 11" ;
+  ph:dayIndex 0 ;
+  ph:marksPhase ph:SelfNomination .
+
+# --- Process situations: the verdict's `phase` resolves by IRI ---
+
+<https://potato-hamlet.example/ontology/state/registryopen> a ph:RegistryOpen ;
+  ph:label "Registry is open for nominations" .
+
+<https://potato-hamlet.example/ontology/state/ballotsready> a ph:BallotsReady ;
+  ph:label "Ballots created and distributed" .
+
+<https://potato-hamlet.example/ontology/state/pollsopen> a ph:PollsOpen ;
+  ph:label "Ballot box is open" .
+
+<https://potato-hamlet.example/ontology/state/pollsclosed> a ph:PollsClosed ;
+  ph:label "Ballot box is closed" .
+
+<https://potato-hamlet.example/ontology/state/resultsposted> a ph:ResultsPosted ;
+  ph:label "Results are posted" .
+
+# --- The election process instance and its initial state.
+# The four flags record that a transition happened; the oracle owns the
+# transition. All false at the start: nothing has been performed yet.
+
+<https://potato-hamlet.example/ontology/election/mayor-2027-r0> a ph:MayorElectionCycle ;
+  ph:label "Mayor election 2027" ;
+  ph:cycleIndex 0 ;
+  ph:announced false ;
+  ph:prepared false ;
+  ph:counted false ;
+  ph:proclaimed false .
+
+# --- Office and candidacy are roles: roleIn gives the context, playedBy
+# gives the citizen. An empty office means no ph:MayorRole individual.
+
+<https://potato-hamlet.example/ontology/role/mayor> a ph:MayorRole ;
+  ph:label "Mayor" ;
+  ph:roleIn <https://potato-hamlet.example/ontology/hamlet> .
+
+# --- Role vocabulary seeded so a consumer can resolve every role by IRI.
+
+<https://potato-hamlet.example/ontology/role/voter> a ph:VoterRole ;
+  ph:label "Voter" .
+
+<https://potato-hamlet.example/ontology/role/candidate> a ph:CandidateRole ;
+  ph:label "Candidate" .
+
+<https://potato-hamlet.example/ontology/role/ballot-owner> a ph:BallotOwnerRole ;
+  ph:label "Ballot owner" .
+
+<https://potato-hamlet.example/ontology/role/fallback-authority> a ph:FallbackAuthorityRole ;
+  ph:label "Oldest person when no mayor holds office" .
