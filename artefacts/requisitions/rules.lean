@@ -32,12 +32,13 @@ inductive TripleObj where
 deriving Repr, DecidableEq
 
 instance : FromJson TripleObj where
-  fromJson? j := do
-    match j.getObjVal? "lit" with
-    | .ok lv =>
-      let ty ← j.getObjVal? "type" >>= FromJson.fromJson? (α := String)
-      FromJson.fromJson? (α := String) lv >>= fun v => return TripleObj.lit v ty
-    | .error _ => j.getStr? >>= fun v => return TripleObj.iri v
+  fromJson? j := match j with
+    | .str v => return TripleObj.iri v
+    | .obj _ => do
+        let v ← j.getObjVal? "lit" >>= FromJson.fromJson? (α := String)
+        let dt ← j.getObjVal? "type" >>= FromJson.fromJson? (α := String)
+        return TripleObj.lit v dt
+    | _ => Except.error "object must be an IRI string or a literal object"
 
 instance : ToJson TripleObj where
   toJson
@@ -52,10 +53,19 @@ deriving Repr, DecidableEq
 
 instance : FromJson Triple where
   fromJson? j := do
-    let subject ← j.getObjVal? "0" >>= FromJson.fromJson? (α := String)
-    let predicate ← j.getObjVal? "1" >>= FromJson.fromJson? (α := String)
-    let object ← j.getObjVal? "2" >>= FromJson.fromJson? (α := TripleObj)
-    return { subject, predicate, object }
+    -- A triple crosses the wire as a 3-element ARRAY, so it has to be read as
+    -- one. Reading it with `getObjVal? "0"` looks like it works and does not:
+    -- that asks for a field named "0" on a value that has none.
+    let arr ← j.getArr?
+    let t ← if arr.size = 3 then
+      (do
+        let s ← arr[0]!.getStr?
+        let pr ← arr[1]!.getStr?
+        let o ← FromJson.fromJson? (α := TripleObj) arr[2]!
+        pure { subject := s, predicate := pr, object := o })
+    else
+      Except.error "triple must be a 3-element array"
+    return t
 
 instance : ToJson Triple where
   toJson t := Json.arr #[toJson t.subject, toJson t.predicate, toJson t.object]
@@ -262,8 +272,12 @@ def settleDueDay : Nat := deadlineDay
 def WindowOpen (day : Nat) : Prop := day < windowCloses
 def PastDeadline (day : Nat) : Prop := deadlineDay ≤ day
 
-def windowOpen? (day : Nat) : Bool := decide (WindowOpen day)
-def pastDeadline? (day : Nat) : Bool := decide (PastDeadline day)
+-- `decide (WindowOpen day)` would not elaborate: instance resolution does not
+-- unfold a user-defined Prop to see `Nat.lt` underneath it, so it cannot find a
+-- `Decidable` instance. The comparison is therefore written out here, and the
+-- `Prop` twins above are what the theorems below are stated against.
+def windowOpen? (day : Nat) : Bool := decide (day < windowCloses)
+def pastDeadline? (day : Nat) : Bool := decide (deadlineDay ≤ day)
 
 /-- The (day, hour) a Chronoid bound denotes, if the instance has that bound. -/
 def boundMoment? (g : Graph) (inst which : String) : Option Nat :=
@@ -381,24 +395,24 @@ def lodgeDue? (s : Snapshot) (citizen : String) : Bool :=
   windowOpen? s.day && !(holdsOpenIn s citizen)
 
 def LodgeDue (s : Snapshot) (citizen : String) : Prop :=
-  WindowOpen s.day ∧ (openReqsOf s).all (fun r => ¬(r.requester == citizen))
+  WindowOpen s.day ∧ ¬ ((openReqsOf s).any (fun r => r.requester == citizen))
 
 theorem lodgeDue_agrees (s : Snapshot) (citizen : String) :
     lodgeDue? s citizen = true ↔ LodgeDue s citizen := by
-  simp [lodgeDue?, LodgeDue, windowOpen?, decide_eq_true_eq,
+  simp [lodgeDue?, LodgeDue, windowOpen?, WindowOpen, decide_eq_true_eq,
     Bool.and_eq_true, Bool.not_eq_true, holdsOpenIn, openReqsOf, isOpen,
-    List.all_eq_true, List.any_eq_true]
+    List.all_eq_true, List.any_eq_true, and_assoc]
 
 /-- Clause 3: the requester may withdraw while it is undecided. -/
 def withdrawDue? (s : Snapshot) (citizen : String) : Bool :=
   (openReqsOf s).any (fun r => r.requester == citizen)
 
 def WithdrawDue (s : Snapshot) (citizen : String) : Prop :=
-  ∃ r ∈ openReqsOf s, r.requester == citizen
+  ∃ r ∈ openReqsOf s, r.requester = citizen
 
 theorem withdrawDue_agrees (s : Snapshot) (citizen : String) :
     withdrawDue? s citizen = true ↔ WithdrawDue s citizen := by
-  simp [withdrawDue?, WithdrawDue, openReqsOf, isOpen]
+  simp [withdrawDue?, WithdrawDue, openReqsOf, isOpen, List.any_eq_true, and_assoc]
 
 /-- Clause 4: an open requisition is due a decision, and only while an Officer
     exists to give it. -/
@@ -406,11 +420,12 @@ def settleDue? (s : Snapshot) (req : String) : Bool :=
   (openReqsOf s).any (fun r => r.id == req) && s.officerId.isSome
 
 def SettleDue (s : Snapshot) (req : String) : Prop :=
-  (∃ r ∈ openReqsOf s, r.id == req) ∧ s.officerId.isSome
+  (∃ r ∈ openReqsOf s, r.id = req) ∧ s.officerId.isSome
 
 theorem settleDue_agrees (s : Snapshot) (req : String) :
     settleDue? s req = true ↔ SettleDue s req := by
-  simp [settleDue?, SettleDue, openReqsOf, isOpen, Bool.and_eq_true]
+  simp [settleDue?, SettleDue, openReqsOf, isOpen, Bool.and_eq_true,
+    List.any_eq_true, and_assoc]
 
 /-- The guard that makes a named instance checkable: the requisition must be one
     the law knows about. An act naming anything else is refused BY NAME rather
@@ -418,11 +433,11 @@ theorem settleDue_agrees (s : Snapshot) (req : String) :
 def knownReq? (s : Snapshot) (req : String) : Bool :=
   s.reqs.any (fun r => r.id == req)
 
-def KnownReq (s : Snapshot) (req : String) : Prop := ∃ r ∈ s.reqs, r.id == req
+def KnownReq (s : Snapshot) (req : String) : Prop := ∃ r ∈ s.reqs, r.id = req
 
 theorem knownReq_agrees (s : Snapshot) (req : String) :
     knownReq? s req = true ↔ KnownReq s req := by
-  simp [knownReq?, KnownReq]
+  simp [knownReq?, KnownReq, List.any_eq_true]
 
 def decisionValid? (d : String) : Bool :=
   decide (d == "approved" || d == "refused")
@@ -740,9 +755,7 @@ def applySettle (s : Snapshot) (officer requisition decision : String) : Except 
     | none => .error s!"unknown requisition: {requisition}"
     | some r =>
       let late := pastDeadline? s.day
-      let marked :=
-        { r with status := decision, outcome := some decision, late := late
-          , decidedBy := some officer }
+      let marked : Req := { r with status := decision, outcome := some decision, late := late, decidedBy := some officer }
       let decided := marked.stampFinishAt s.day s.hour
       .ok (updateReq s requisition (fun _ => decided))
 
@@ -777,8 +790,8 @@ def ensureReq (g : Graph) (r : Req) : Graph :=
     | some d => Graph.setOne g9 id (ph "decidedBy") (.iri d)
   let g11 := Graph.setOne g10 id (ph "hasTime") (.iri chrono)
   -- The Chronoid, with each bound denoting ONE moment: day AND hour together.
-  let timeBoundary (which : String) (d h : Nat) : Graph :=
-    let b1 := Graph.setOne g which rdfType (.iri gfoTimeBoundary)
+  let timeBoundary (base : Graph) (which : String) (d h : Nat) : Graph :=
+    let b1 := Graph.setOne base which rdfType (.iri gfoTimeBoundary)
     let b2 := Graph.setOne b1 which (ph "dayIndex") (natLit d)
     Graph.setOne b2 which (ph "atHour") (natLit h)
   let bStart := ph "bound/start/" ++ shortId id
