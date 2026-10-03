@@ -477,7 +477,7 @@ MUTATIONS: list[Mutation] = [
         edits={
             "manifest.yaml": [
                 (
-                    r"^- id: mayor$\n  class: Citizen$\n  label: Mayor$\n  template: \"\{label\}\"$\n",
+                    r"^- id: mayor\n  class: Citizen\n  label: Mayor\n  template:.*\n",
                     "",
                 )
             ]
@@ -525,7 +525,12 @@ MUTATIONS: list[Mutation] = [
         id="5.6-reading-without-template",
         task="5.6",
         edits={
-            "manifest.yaml": [(r"^  template: \"\{value\} votes\"$", '  template: ""')]
+            # Quote-agnostic: scripts/freeze.py rewrites the manifest through
+            # yaml.safe_dump, which normalises "{value} votes" to '{value} votes'.
+            # A pattern pinned to one quoting style silently stops matching the
+            # moment the set is frozen, and the harness reports a mutation error
+            # rather than a gate failure.
+            "manifest.yaml": [(r"^  template:\s+\S.*votes\S*\s*$", '  template: ""')]
         },
         expect_check="readings declared",
         expect_text="declares no template",
