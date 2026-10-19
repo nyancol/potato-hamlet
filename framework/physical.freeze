@@ -1,0 +1,3 @@
+freeze: sha256:a5e498bafb67f5a83abd100d0b8250ef460f83a44dfb06b9976fb76f5675a364
+note: Reviewed as a framework artefact. Changing this file invalidates every case
+  freeze recorded against it.

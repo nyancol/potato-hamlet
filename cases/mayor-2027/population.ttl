@@ -1,0 +1,121 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Law seeds for mayor-2027: the individuals this law derives -- its calendar,
+# its process instance, its states and its roles. The hamlet itself
+# (citizens, furniture, supply, the clock) lives in framework/world.ttl and
+# is referenced by IRI, never restated here. Loaded alongside the world into
+# the runtime graph at session start.
+#
+# Full IRIs in angle brackets because "/" is not valid in a Turtle prefixed
+# name: ph:calendar/2027/announce is the prefixed reading of
+# <https://potato-hamlet.example/ontology/calendar/2027/announce>.
+# --- Calendar: cycle day 0 is announce, 9 prepare, 10 election (Jan 12).
+# atDate is display-only; the oracle owns day arithmetic. ---
+
+<https://potato-hamlet.example/ontology/calendar/2027/announce> a ph:CalendarPoint ;
+  ph:label "Announce, Jan 2" ;
+  ph:atDate "2027-01-02"^^xsd:date ;
+  ph:dayIndex 0 ;
+  ph:marksPhase ph:AnnounceElection .
+
+<https://potato-hamlet.example/ontology/calendar/2027/prepare> a ph:CalendarPoint ;
+  ph:label "Prepare, Jan 11" ;
+  ph:atDate "2027-01-11"^^xsd:date ;
+  ph:dayIndex 9 ;
+  ph:marksPhase ph:CreateBallots .
+
+<https://potato-hamlet.example/ontology/calendar/2027/election> a ph:CalendarPoint ;
+  ph:label "Election, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:marksPhase ph:CastVote .
+
+# --- Counting and proclamation are due at one moment: the polls closing.
+# Counting is due at that hour; proclamation is due the instant counting
+# completes, which is the same node. One point marks both phases rather
+# than the schedule being written twice.
+
+<https://potato-hamlet.example/ontology/calendar/2027/polls-close> a ph:CalendarPoint ;
+  ph:label "Polls close, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:atHour 19 ;
+  ph:marksPhase ph:CountVotes ;
+  ph:marksPhase ph:ProclaimMayor .
+
+<https://potato-hamlet.example/ontology/calendar/2027/nomination> a ph:CalendarSpan ;
+  ph:label "Nomination window, Jan 2 to Jan 11" ;
+  # No ph:dayIndex: the span is a Chronoid, not a moment, and its start is
+  # already named by the temporallyStartedBy bound below.
+  ph:marksPhase ph:SelfNomination ;
+  gfo-core:temporallyStartedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
+  gfo-core:temporallyFinishedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/prepare> .
+
+# --- Process situations: the verdict's `phase` resolves by IRI ---
+
+<https://potato-hamlet.example/ontology/state/registryopen> a ph:RegistryOpen ;
+  ph:label "Registry is open for nominations" .
+
+<https://potato-hamlet.example/ontology/state/ballotsready> a ph:BallotsReady ;
+  ph:label "Ballots created" .
+
+<https://potato-hamlet.example/ontology/state/pollsopen> a ph:PollsOpen ;
+  ph:label "Ballot box is open" .
+
+<https://potato-hamlet.example/ontology/state/pollsclosed> a ph:PollsClosed ;
+  ph:label "Ballot box is closed" .
+
+<https://potato-hamlet.example/ontology/state/resultsposted> a ph:ResultsPosted ;
+  ph:label "Results are posted" .
+
+# --- The election process instance and its initial state.
+# The four flags record that a transition happened; the oracle owns the
+# transition. All false at the start: nothing has been performed yet.
+# No ph:cycleIndex here: this is the FLAT law -- one election, addressed by a
+# fixed IRI, with its dates from the law's own constants. An index would name
+# an ordering there is no ordering to name, and no guard could read it.
+
+<https://potato-hamlet.example/ontology/election/mayor-2027-r0> a ph:MayorElectionCycle ;
+  ph:label "Mayor election 2027" ;
+  ph:announced false ;
+  ph:prepared false ;
+  ph:counted false ;
+  ph:proclaimed false ;
+  ph:hasTime <https://potato-hamlet.example/ontology/chronoid/mayor-2027-r0> .
+
+# --- Lifecycle: the election is INITIALISED, not begun.
+# ph:hasTime runs situation -> time; the Chronoid then carries the bounds.
+# This instance deliberately has NO gfo-core:temporallyStartedBy, which is
+# exactly how a consumer tells "awaiting its trigger" from "ongoing".
+
+<https://potato-hamlet.example/ontology/chronoid/mayor-2027-r0>
+  a gfo-light:Chronoid ;
+  ph:label "Life of mayor election 2027" .
+
+# --- Office and candidacy are roles: roleIn gives the context, playedBy
+# gives the citizen. An empty office means no ph:MayorRole individual.
+
+<https://potato-hamlet.example/ontology/role/mayor> a ph:MayorRole ;
+  ph:label "Mayor" ;
+  ph:roleIn <https://potato-hamlet.example/ontology/hamlet> .
+
+# --- Role vocabulary seeded so a consumer can resolve every role by IRI.
+
+<https://potato-hamlet.example/ontology/role/voter> a ph:VoterRole ;
+  ph:label "Voter" .
+
+<https://potato-hamlet.example/ontology/role/candidate> a ph:CandidateRole ;
+  ph:label "Candidate" .
+
+<https://potato-hamlet.example/ontology/role/ballot-owner> a ph:BallotOwnerRole ;
+  ph:label "Ballot owner" .
+
+<https://potato-hamlet.example/ontology/role/fallback-authority> a ph:FallbackAuthorityRole ;
+  ph:label "Oldest person when no mayor holds office" .

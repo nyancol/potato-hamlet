@@ -1,0 +1,19 @@
+{
+  "name": "potato-hamlet-drafting",
+  "version": "0.1.0",
+  "description": "Clarification-loop drafting for Potato Hamlet laws: /draft-law owns the loop, the report tool binds the project-owned schema, wrappers call the repo gate.",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": ["./extensions/drafting/index.ts"],
+    "skills": ["./skills/drafting"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}

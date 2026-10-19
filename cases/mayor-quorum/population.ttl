@@ -1,0 +1,132 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Law seeds for mayor-quorum: the individuals this law derives -- its
+# calendar, its process instances, its states and its roles. The hamlet
+# itself (citizens, furniture, supply, the clock) lives in
+# framework/world.ttl and is referenced by IRI, never restated here. Loaded
+# alongside the world into the runtime graph at session start.
+#
+# Full IRIs in angle brackets because "/" is not valid in a Turtle prefixed
+# name: ph:calendar/2027/announce is the prefixed reading of
+# <https://potato-hamlet.example/ontology/calendar/2027/announce>.
+# --- Calendar: cycle day 0 is announce, 9 prepare, 10 election (Jan 12).
+# atDate is display-only; the oracle owns day arithmetic and mints further
+# calendar individuals at apply time for repeat elections. ---
+
+<https://potato-hamlet.example/ontology/calendar/2027/announce> a ph:CalendarPoint ;
+  ph:label "Announce, Jan 2" ;
+  ph:atDate "2027-01-02"^^xsd:date ;
+  ph:dayIndex 0 ;
+  ph:marksPhase ph:AnnounceElection .
+
+<https://potato-hamlet.example/ontology/calendar/2027/prepare> a ph:CalendarPoint ;
+  ph:label "Prepare, Jan 11" ;
+  ph:atDate "2027-01-11"^^xsd:date ;
+  ph:dayIndex 9 ;
+  ph:marksPhase ph:CreateBallots .
+
+<https://potato-hamlet.example/ontology/calendar/2027/election> a ph:CalendarPoint ;
+  ph:label "Election, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:marksPhase ph:CastVote .
+
+# --- Counting and proclamation are due at one moment: the polls closing.
+# Counting is due at that hour; proclamation is due the instant counting
+# completes, which is the same node. One point marks both phases rather
+# than the schedule being written twice.
+
+<https://potato-hamlet.example/ontology/calendar/2027/polls-close> a ph:CalendarPoint ;
+  ph:label "Polls close, Jan 12" ;
+  ph:atDate "2027-01-12"^^xsd:date ;
+  ph:dayIndex 10 ;
+  ph:atHour 19 ;
+  ph:marksPhase ph:CountVotes ;
+  ph:marksPhase ph:ProclaimMayor .
+
+<https://potato-hamlet.example/ontology/calendar/2027/nomination> a ph:CalendarSpan ;
+  ph:label "Nomination window, Jan 2 to Jan 11" ;
+  # No ph:dayIndex: the span is a Chronoid, not a moment, and its start is
+  # already named by the temporallyStartedBy bound below -- which points at the
+  # announce point carrying that same day. A second copy of the position on a
+  # span is what the ph:dayIndex domain forbids.
+  ph:marksPhase ph:SelfNomination ;
+  gfo-core:temporallyStartedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/announce> ;
+  gfo-core:temporallyFinishedBy
+    <https://potato-hamlet.example/ontology/calendar/2027/prepare> .
+
+# --- The scheduled election, not yet begun (no dayIndex of its own: it is
+# initialised, and the oracle starts it when the clock reaches announce). ---
+
+<https://potato-hamlet.example/ontology/election/mayor-quorum-r0> a ph:MayorElectionCycle ;
+  ph:label "First election, Jan 12" ;
+  ph:cycleIndex 0 ;
+  ph:announced false ;
+  ph:prepared false ;
+  ph:counted false ;
+  ph:proclaimed false .
+# No ph:repeatGapDays, and no ph:announceDay / ph:prepareDay / ph:electionDay
+# either -- all four were seeded here and read by nothing. The oracle derives
+# the schedule from ph:cycleIndex plus announceK/prepareK/electionDayK, and the
+# repeat interval it holds as its own `repeatGap` and records once as
+# ph:gapDays on the span below. Seeding a value nothing consults is a second
+# source for a fact, not a description of what the law permits.
+
+# --- Process situations: the verdict's `phase` resolves by IRI ---
+
+<https://potato-hamlet.example/ontology/state/registryopen> a ph:RegistryOpen ;
+  ph:label "Registry is open for nominations" .
+
+<https://potato-hamlet.example/ontology/state/ballotsready> a ph:BallotsReady ;
+  ph:label "Ballots created and distributed" .
+
+<https://potato-hamlet.example/ontology/state/pollsopen> a ph:PollsOpen ;
+  ph:label "Ballot box is open" .
+
+<https://potato-hamlet.example/ontology/state/pollsclosed> a ph:PollsClosed ;
+  ph:label "Ballot box is closed" .
+
+<https://potato-hamlet.example/ontology/state/resultsposted> a ph:ResultsPosted ;
+  ph:label "Results are posted" .
+# --- Lifecycle: the first election is INITIALISED, not begun.
+# ph:hasTime runs situation -> time; the Chronoid then carries the bounds.
+# This instance deliberately has NO gfo-core:temporallyStartedBy, which is
+# exactly how a consumer tells "awaiting its trigger" from "ongoing".
+
+<https://potato-hamlet.example/ontology/election/mayor-quorum-r0>
+    ph:hasTime <https://potato-hamlet.example/ontology/chronoid/mayor-quorum-r0> .
+
+<https://potato-hamlet.example/ontology/chronoid/mayor-quorum-r0>
+    a gfo-light:Chronoid ;
+    ph:label "First election window" .
+
+# --- The repeat is due a fixed gap after the cycle closes, not on an
+# absolute day: the base calendar is shared by every repeat, and repeat k
+# sits at E-day 10 + 30k. So the span carries ph:gapDays and no
+# ph:dayIndex; the oracle mints the concrete start and finish per repeat.
+
+<https://potato-hamlet.example/ontology/calendar/repeat-gap> a ph:CalendarSpan ;
+  ph:label "Repeat election gap" ;
+  ph:gapDays 30 ;
+  ph:marksPhase ph:ScheduleRepeatElection .
+# No ph:dayIndex and no bounds, because there is nothing fixed to bound. What
+# this records is the INTERVAL the law fixes; the moment a particular repeat
+# lands on is the oracle's to compute when the repeat is scheduled, and it mints
+# that repeat's own points then. A CalendarPoint named here would assert a day
+# that differs for every repeat after the first.
+
+# --- A permitted causal dependency. ph:causedBy takes the AFFECTED thing as
+# subject, so this says "this election is (potentially) caused by PollsClosed"
+# -- i.e. a closed poll can force the process to change course. Whether the
+# State actually holds, and so whether the change fires, is evaluated by the
+# Lean guard and never asserted here.
+
+<https://potato-hamlet.example/ontology/election/mayor-quorum-r0>
+    ph:causedBy <https://potato-hamlet.example/ontology/state/pollsclosed> .
+

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://potato-hamlet.example/schemas/clarification-report.schema.json",
+  "title": "Clarification report",
+  "description": "The extractor's per-pass report of law-text steps it cannot translate into the physical world. A separate structured value alongside the three draft files, never a fenced block inside a draft. Empty means the loop has converged; non-empty means the draft is not complete.",
+  "type": "object",
+  "required": ["report"],
+  "additionalProperties": false,
+  "properties": {
+    "report": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "why-ungroundable"],
+        "additionalProperties": false,
+        "properties": {
+          "step": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The law-text step, quoted closely enough to find in law.txt."
+          },
+          "why-ungroundable": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Which declared object, capability, or action is missing, and why none accounts for the step."
+          }
+        }
+      }
+    }
+  }
+}

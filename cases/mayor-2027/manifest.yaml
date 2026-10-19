@@ -1,0 +1,88 @@
+case: mayor-2027
+freeze: sha256:159913c2cd4a60dd22af6e2a40e6feba0725f3b71b175da1151b1adf7d20fa51
+ontology: ontology.ttl
+population: population.ttl
+oracle: oracle
+time:
+  cycle_days: 1461
+  announce_minus: 10
+  prepare_minus: 1
+  polls_open: 9
+  polls_close: 19
+ecas:
+- id: announce
+  eca_process: AnnounceElection
+  holder_role: MayorRole
+  params: []
+  label: Announce election
+  message: '{holder} should announce candidacy opening'
+  modality: should
+- id: nominate
+  eca_process: SelfNomination
+  holder_role: CandidateRole
+  params:
+  - name: citizen
+    role: VoterRole
+    source: selected
+  label: Nominate self
+  message: '{citizen} may nominate before the registry closes'
+  modality: may
+- id: prepare
+  eca_process: CreateBallots
+  holder_role: MayorRole
+  params: []
+  requires:
+  - class: Inscriptible
+  label: Create ballots
+  message: '{holder} must write one ballot per candidate for each citizen'
+  modality: must
+- id: deliver
+  eca_process: CreateBallots
+  holder_role: MayorRole
+  params:
+  - name: recipient
+    role: BallotOwnerRole
+    source: choices
+  label: Deliver ballots to a mailbox
+  message: '{holder} must put each recipient''s papers in their mailbox'
+  modality: must
+- id: vote
+  eca_process: CastVote
+  holder_role: VoterRole
+  acts_on:
+  - class: BallotBox
+  params:
+  - name: voter
+    role: VoterRole
+    source: selected
+  - name: candidate
+    role: CandidateRole
+    source: choices
+  label: Cast vote
+  message: '{citizen} should cast one vote 9am-7pm'
+  modality: should
+- id: count
+  eca_process: CountVotes
+  holder_role: MayorRole
+  params: []
+  label: Count votes
+  message: '{holder} must count votes and post results'
+  modality: must
+- id: proclaim
+  eca_process: ProclaimMayor
+  holder_role: MayorRole
+  params: []
+  label: Proclaim mayor
+  message: '{holder} must proclaim the winner (oldest on tie)'
+  modality: must
+readings:
+- id: mayor
+  class: Citizen
+  label: Mayor
+  template: '{label}'
+- id: mayorVotes
+  class: null
+  label: Votes for the mayor
+  template: '{value} votes'
+shared_vocabulary: sha256:a5e498bafb67f5a83abd100d0b8250ef460f83a44dfb06b9976fb76f5675a364
+world: sha256:f302a813abba5df7ec3ab0ee4ef7afa6a5a1b8a62a436bce70a17c04c42c276f

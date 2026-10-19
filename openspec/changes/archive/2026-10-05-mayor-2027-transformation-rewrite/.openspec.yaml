@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-10-05
+# No spec delta, deliberately. The framework semantics this law exercises are
+# already in `law-framework` and `law-extraction` as archived by
+# `runtime-time-and-minting-contract`: a transformation is a Role rather than a
+# new individual, an act declares what it acts on and is refused when one is
+# absent, and nothing physical is conjured. This change is the second law to
+# satisfy those requirements and the first to satisfy them WITHOUT changing one,
+# which is the point -- the requirements do not need rewriting to accept a
+# conforming law. `mayor-quorum-transformation-rewrite` carries the delta that
+# sharpened the gate checks; this one has nothing to sharpen.
+skip_specs: true

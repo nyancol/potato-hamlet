@@ -1,5 +1,7 @@
 [tools]
-"npm:@fission-ai/openspec" = "1.13.2"
+"npm:@fission-ai/openspec" = "latest"
 "npm:firecrawl-cli" = "1.24.6"
+"npm:@opencode/cli" = "latest"
+"npm:@earendil-works/pi-coding-agent" = "latest"
 "uv" = "0.12.19"
 "github:leanprover/elan" = "latest"

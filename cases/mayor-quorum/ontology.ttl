@@ -1,0 +1,293 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Frozen schema (TBox): classes and properties only. Individuals live at
+# runtime — seeded ones in population.ttl, minted ones by the oracle.
+# Every ph: class subclasses a GFO-light/GFO-core category and is
+# mirror-by-name with a Lean type in rules.lean.
+
+# ------------------------------------------------------------------
+# Framework invariants (required of every law)
+# ------------------------------------------------------------------
+
+ph:Citizen rdfs:subClassOf gfo-light:Object .
+ph:Clock rdfs:subClassOf gfo-light:TimeBoundary .
+ph:CalendarPoint rdfs:subClassOf gfo-light:TimeBoundary .
+ph:CalendarSpan rdfs:subClassOf gfo-light:Chronoid .
+
+ph:label a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf rdfs:label ;
+  rdfs:range xsd:string .
+
+ph:atDate a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:dateTimeValue .
+
+# Domain is the GFO category, not a ph: subclass: the hour of a moment sits on
+# ph:Clock, on a ph:CalendarPoint, and on the plain gfo-light:TimeBoundary
+# individuals the oracle mints as a Chronoid's start and finish bounds.
+ph:atHour a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:domain gfo-light:TimeBoundary ;
+  rdfs:range xsd:integer .
+
+# A span whose length is a gap rather than a position. The base calendar is
+# frozen and shared by every repeat, so a phase due a fixed number of days
+# after a runtime-minted instant cannot carry an absolute ph:dayIndex. It
+# carries ph:gapDays instead, and the oracle mints the concrete bound per
+# instance.
+ph:gapDays a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:range xsd:integer .
+
+# A day index names a moment, so it belongs on ph:Clock, on a
+# ph:CalendarPoint, and on the plain gfo-light:TimeBoundary bounds the oracle
+# mints -- and nowhere else. A process instance, an occurrence or a span carries
+# no present of its own; a second copy of the clock is a second source for a
+# fact the framework already fixes. Functional because the oracle rewrites it
+# with set-one: re-encoding an unchanged bound must not accumulate a value.
+ph:dayIndex a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:domain gfo-light:TimeBoundary ;
+  rdfs:range xsd:integer .
+
+# A calendar node names the Process phase it bounds. This is NOT the inverse
+# of gfo-core:hasTime: that relation runs situation -> time and its object is
+# an individual, whereas marksPhase's object is a phase CLASS. The base
+# calendar is frozen and shared by every repeat, so it can only name a phase
+# type — an instance does not exist yet at review time. Grounded by TYPE
+# rather than by subproperty: a calendar node is the time of some process, so
+# declaring subPropertyOf hasTime would assert something false.
+ph:marksPhase a owl:ObjectProperty ;
+  rdfs:domain gfo-light:Chronoid , gfo-light:TimeBoundary ;
+  rdfs:range gfo-core:Process .
+
+ph:age a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:domain ph:Citizen ;
+  rdfs:range xsd:integer .
+
+# ------------------------------------------------------------------
+# Relationship vocabulary (framework, GFO-grounded)
+# ------------------------------------------------------------------
+
+# Composition: a Process is made of phases. Declared as class-level
+# assertions, not someValuesFrom, so the hierarchy is enumerable.
+ph:hasPhase a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasSituationPart .
+
+ph:hasParticipant a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasParticipant .
+
+# Direction is situation -> time; the Chronoid then carries the bounds.
+# NOTE: timeOf is the INVERSE of hasTime in GFO, so this must subproperty
+# hasTime. Subpropertying timeOf asserted the opposite direction.
+# One Chronoid per instance: the oracle rewrites this with set-one on every
+# apply, so it is functional like the datatypes above.
+ph:hasTime a owl:ObjectProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:hasTime .
+
+ph:relates a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:relates .
+
+ph:containsRole a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:containsRole .
+
+ph:qualityOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:qualityOf .
+
+# A State can bring about a change in a Process: permitted dependency,
+# not an evaluated one. Never used for ordering between phases.
+ph:causedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:causedBy .
+
+# Both sides of every Role.
+ph:roleIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:roleIn .
+
+ph:playedBy a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-light:playedBy .
+
+# ------------------------------------------------------------------
+# Law vocabulary
+# ------------------------------------------------------------------
+
+# ph:Hamlet joins the physical classes below: declared once in
+# framework/physical.ttl, since it is what every law's text presupposes.
+# ph:Townhall, ph:BallotBox, ph:Mailbox, ph:ResultsBoard and
+# ph:CandidateRegistry are NOT declared here. They are what this law's text
+# presupposes -- a townhall to meet in, a mailbox per citizen, a box to put
+# the papers in, a board to post results on, a book to write names in -- so
+# they are declared once in framework/physical.ttl and resolved alongside
+# this file. Declaring them here as well would be two declarations of one
+# concept, and the review gate reports that. What this law adds is what its
+# own text makes of them, not the things themselves.
+# ph:BallotVote is a MEANING a sheet takes on, not a kind of thing. A sheet of
+# paper does not become a ballot; it plays the role of one in this election, so
+# `ph:playedBy` names the sheet and `ph:roleIn` names the cycle. That is what
+# lets one sheet be a ballot in one election and something else in another, and
+# what stops the individual changing class as the process unfolds.
+ph:BallotVote rdfs:subClassOf gfo-light:Role .
+# The writing ON a sheet is the sheet's own ph:label, not an individual.
+#
+# There is deliberately no `ph:Inscription` class. Writing a name on paper the
+# hamlet already owns creates no thing: the mark is a literal on an existing
+# sheet, and law-framework's list of what the oracle may mint is closed -- a
+# meaning, an occurrence, a process instance, a calendar node, a bound. An
+# inscription individual would have been a sixth kind, added by the same change
+# that closed the finding which exists to catch paper conjured out of nothing.
+# What the name DENOTES is on the Role above, never on the sheet: "Bob"
+# resolves to no citizen except through ph:denotes.
+ph:VoteResult rdfs:subClassOf gfo-light:InformationObject .
+
+# ------------------------------------------------------------------
+# This law's processes are SPECIALISATIONS of the shared physical ones.
+#
+# The same real moment is described twice: a physical Deposit has a sheet of
+# paper going into a box, while the legal CastVote has a ballot vote going into
+# a ballot box. Two processes, different participants, related by the
+# transformation rather than by a shared class. Subclassing is what grounds the
+# shared action in this law's hierarchy (design decision 7a).
+# ------------------------------------------------------------------
+
+# Which candidate a Role denotes, in this law's own situation. GFO has no
+# inscription-to-bearer relation to coincide with, so it is grounded by type:
+# a Role pointing at a Citizen.
+ph:denotes a owl:ObjectProperty ;
+  rdfs:domain gfo-light:Role ;
+  rdfs:range gfo-light:Object .
+
+# Where a ballot in THIS election has been put. Grounded by type, as ph:denotes
+# is: GFO has no relation from a meaning to a container.
+#
+# It is on the Role, not on the sheet, and that placement is the whole point. A
+# sheet is a reusable physical object: one supply of paper serves every election,
+# so a sheet that was carried to its owner's mailbox for one election is still
+# sitting there for the next. Recording delivery on the sheet would therefore
+# make a later ballot read as delivered before anyone carried it, and the
+# distribution check would pass on nothing. Delivery answers "was THIS ballot
+# delivered in THIS election", which is contextual, so it belongs to the Role --
+# and a Role's IRI is a function of the occurrence, so it is scoped for free.
+#
+# `ph:placedIn` from the shared vocabulary is the physical relation (what a
+# Deposit was performed with, what went into what) and stays on the sheet, where
+# it describes where the paper is rather than what it meant.
+ph:deliveredTo a owl:ObjectProperty ;
+  rdfs:domain gfo-light:Role ;
+  rdfs:range gfo-light:Object .
+
+# Which citizen a container is for lives in framework/physical.ttl as
+# ph:ownedBy. Grounded by domain and range, as ph:denotes is: GFO has no
+# owner-to-owned relation for a container that is not a process
+# participant, so the grounding is by type.
+
+ph:MayorRole rdfs:subClassOf gfo-light:Role .
+ph:CandidateRole rdfs:subClassOf gfo-light:Role .
+ph:VoterRole rdfs:subClassOf gfo-light:Role .
+
+# Roles for entities with more than one participant. `roleIn` gives the
+# context, so a Citizen's roles in different situations never collide:
+# a Citizen is a Voter of one cast vote and a BallotOwner of one ballot.
+ph:BallotOwnerRole rdfs:subClassOf gfo-light:Role .
+
+# Per-cycle transition flags. The oracle owns the transition; these record
+# that it happened, and the verdict's `phase` is derived from them plus time.
+ph:announced a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:booleanValue ;
+  rdfs:domain ph:MayorElectionCycle ;
+  rdfs:range xsd:boolean .
+
+ph:prepared a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:booleanValue ;
+  rdfs:domain ph:MayorElectionCycle ;
+  rdfs:range xsd:boolean .
+
+ph:counted a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:booleanValue ;
+  rdfs:domain ph:MayorElectionCycle ;
+  rdfs:range xsd:boolean .
+
+ph:proclaimed a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:booleanValue ;
+  rdfs:domain ph:MayorElectionCycle ;
+  rdfs:range xsd:boolean .
+ph:FallbackAuthorityRole rdfs:subClassOf gfo-light:Role .
+
+ph:CitizenAge rdfs:subClassOf gfo-light:Quality .
+
+ph:MayorElectionCycle rdfs:subClassOf gfo-core:Process .
+ph:AnnounceElection rdfs:subClassOf gfo-core:Process .
+ph:SelfNomination rdfs:subClassOf gfo-core:Process .
+ph:CreateBallots rdfs:subClassOf ph:Inscribe .
+ph:CastVote rdfs:subClassOf ph:Deposit .
+ph:CountVotes rdfs:subClassOf gfo-core:Process .
+ph:ProclaimMayor rdfs:subClassOf gfo-core:Process .
+ph:ScheduleRepeatElection rdfs:subClassOf gfo-core:Process .
+
+ph:RegistryOpen rdfs:subClassOf gfo-core:State .
+ph:BallotsReady rdfs:subClassOf gfo-core:State .
+ph:PollsOpen rdfs:subClassOf gfo-core:State .
+ph:PollsClosed rdfs:subClassOf gfo-core:State .
+ph:ResultsPosted rdfs:subClassOf gfo-core:State .
+
+# Per-cycle calendar indices. The ontology declares the shape; the oracle
+# computes concrete dates at apply time and mints deterministic cycle IRIs
+# from (case, index). Repeats never shift the 4-year election clock — they
+# only shorten the mandate in office.
+ph:cycleIndex a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:decimalValue ;
+  rdfs:range xsd:integer .
+
+
+ph:outcome a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:subPropertyOf gfo-core:stringValue ;
+  rdfs:range xsd:string .
+
+# ------------------------------------------------------------------
+# Declared process hierarchy
+# The root Process and its constituent phases. Every phase below is
+# reachable from ph:MayorElectionCycle through ph:hasPhase.
+# ------------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# Declared participants: which Roles each Process class involves.
+# The manifest's `holder_role` and `params[].role` must name a Role listed
+# here for that ECA's `eca_process`, so the two cannot drift apart.
+# ------------------------------------------------------------------
+
+ph:AnnounceElection ph:hasParticipant ph:MayorRole ,
+                                         ph:FallbackAuthorityRole .
+
+ph:SelfNomination ph:hasParticipant ph:VoterRole ,
+                                    ph:CandidateRole .
+
+# Two roles, because two things are true of this phase at once: the AUTHORITY
+# makes and delivers the papers, and the CITIZEN each set of papers is made out
+# for. The citizen is a participant here because their mailbox is one of the
+# objects the duty acts on -- "the mailbox of each citizen" (law.txt:12).
+ph:CreateBallots ph:hasParticipant ph:MayorRole ,
+                                 ph:FallbackAuthorityRole ,
+                                 ph:BallotOwnerRole .
+
+ph:CastVote ph:hasParticipant ph:VoterRole ,
+                            ph:CandidateRole .
+
+ph:CountVotes ph:hasParticipant ph:MayorRole .
+
+ph:ProclaimMayor ph:hasParticipant ph:MayorRole .
+
+ph:ScheduleRepeatElection ph:hasParticipant ph:MayorRole ,
+                                           ph:FallbackAuthorityRole .
+
+ph:MayorElectionCycle ph:hasPhase
+  ph:AnnounceElection ,
+  ph:SelfNomination ,
+  ph:CreateBallots ,
+  ph:CastVote ,
+  ph:CountVotes ,
+  ph:ProclaimMayor ,
+  ph:ScheduleRepeatElection .

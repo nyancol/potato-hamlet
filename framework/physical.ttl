@@ -1,0 +1,233 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# ===========================================================================
+# The shared physical vocabulary.
+#
+# Frozen schema: classes and properties only, no individuals. Seeded
+# individuals live in each case's population.ttl; ones the oracle mints are
+# materialised into the runtime graph. This file is a framework artefact
+# rather than part of any case, so a concept a law's text presupposes is
+# declared ONCE and every law referring to it refers to the same class.
+#
+# It is AVAILABLE, not required. A law whose text presupposes nothing
+# physical -- requisitions -- loads and passes without drawing on any of
+# it. The four framework invariants a law CANNOT omit (ph:Citizen,
+# ph:Clock, ph:CalendarPoint, ph:CalendarSpan) are different in kind:
+# they are what a law-agnostic consumer operates on, and omitting them
+# fails the gate. See design.md decisions 1 and 8.
+#
+# Three categories, and the split is the point:
+#
+#   OBJECTS       the things a duty is performed on, with, or towards.
+#   ACTIONS       the physical gestures a citizen may perform, naming
+#                 what each acts on and saying NOTHING about what any law
+#                 makes of it.
+#   CAPABILITIES  the kinds that qualify an object for an action.
+#
+# What is shared is the gesture; what is law-determined is what the gesture
+# constitutes, in which process. Two laws can both have a citizen write on
+# paper and mean different things by it, because neither constrained the
+# other: the meaning is a Role the acted-on individual takes on in the
+# law's own process, declared by the law and never here.
+#
+# The file declares no OWL restrictions -- no owl:some, owl:only, or
+# cardinality axiom. An existential restriction can require that SOME
+# qualifying object be involved and cannot exclude a particular one, so
+# `ph:Pencil rdfs:subClassOf [ ph:actedOn some ph:Inscribable ]` would let
+# a reasoner conclude the same of a chisel. Which objects can be used on
+# which is therefore evaluated per act by the oracle, against the seeded
+# individuals, and not asserted by the schema. The subset-axiom style here
+# matches the per-case ontologies for the same reason. See decision 8.
+#
+# Capabilities name a KIND and never an inventory. There is deliberately no
+# ph:Pen: mayor-quorum/law.txt:11-12 says to "make the ballot votes" and
+# have people "write their name", and never names what to write with. An
+# instrument is typed by what it may do, and which physical instrument any
+# given hamlet stocks is the world's business, not this file's. A law
+# needing a narrower kind declares it locally and subClasses it under the
+# capability here. See decision 9.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Objects. Named by the shipped laws' texts, or presupposed by them.
+# ---------------------------------------------------------------------------
+
+ph:Townhall rdfs:subClassOf gfo-light:Object ;
+  rdfs:label "Townhall" .
+# Every citizen has one. A mailbox belongs to a dwelling and holds what is
+# put into it, which is the only sense in which it is a container.
+ph:Dwelling rdfs:subClassOf gfo-light:Object ;
+  rdfs:label "Dwelling" .
+ph:Mailbox rdfs:subClassOf gfo-light:Object , ph:Container ;
+  rdfs:label "Mailbox" .
+ph:BallotBox rdfs:subClassOf gfo-light:Object , ph:Container ;
+  rdfs:label "Ballot box" .
+# A board results are written on, so it inherits Inscribable: an Object that
+# bears that qualification, not an object a duty is performed with.
+ph:ResultsBoard rdfs:subClassOf gfo-light:Object , ph:Inscribable ;
+  rdfs:label "Results board" .
+# The book a name is written into. An InformationObject because the law
+# reads it as the registry rather than as a thing with a shape.
+ph:CandidateRegistry rdfs:subClassOf gfo-light:InformationObject ;
+  rdfs:label "Candidate registry book" .
+# A sheet is the surface an inscription is made on, so it is an Object and
+# inherits the Inscribable qualification. The second superclass is a Quality,
+# not another sort of thing -- see the capabilities section below.
+ph:Sheet rdfs:subClassOf gfo-light:Object , ph:Inscribable ;
+  rdfs:label "Sheet of paper" .
+# The hamlet itself, as the community individuals belong to. Declared here
+# rather than per law because the shared populated world names one hamlet
+# every law refers to, and three identical local declarations of it are the
+# duplication the world store exists to remove.
+ph:Hamlet rdfs:subClassOf gfo-light:ObjectAggregate ;
+  rdfs:label "Hamlet" .
+
+
+# ---------------------------------------------------------------------------
+# Capabilities. A QUALITY inhering in an object, qualifying it for an action.
+#
+# A capability is a Quality, not an Object. What "inscriptible" names is not a
+# sort of thing; it is a qualification a thing may have, and a mailbox does
+# not *become* container-ness by being a container. Declaring it an Object
+# made `ph:Mailbox rdfs:subClassOf ph:Container` say that a mailbox IS a
+# container rather than that it HAS the quality of being one.
+#
+# So a concrete thing is declared an Object and inherits the qualification it
+# bears, and the reading is the one GFO intends: every Sheet is an Object and
+# every Sheet is Inscribable. An act that requires `ph:Inscribable` therefore
+# accepts any bearer of that quality.
+#
+# Not a restriction, and not an inventory: these say such qualifications
+# exist. They do not say which objects have them, and they cannot say which
+# of them works with which.
+#
+# ph:PhysicalCapability is the root, so the review gate can tell a
+# qualification by CAPABILITY from one by NAMED KIND without a hardcoded
+# list: an act that requires a capability leaves the world's choice open,
+# and one that requires a named kind has made it. See scripts/check.py's
+# local-redeclaration and instrument-narrowing checks.
+#
+# Note that "named kind" is decided by DIRECT subclauses of the root, not by
+# depth: `ph:Pen` sits under `ph:Inscriptible`, not under the root, so offering
+# it does not make a law requiring `ph:Inscriptible` a law that named a kind.
+# That is the whole mechanism, and it is why the kinds below are placed here
+# rather than beside the objects.
+# ---------------------------------------------------------------------------
+
+ph:PhysicalCapability rdfs:subClassOf gfo-light:Quality ;
+  rdfs:label "A qualification for a physical action" .
+# Something a citizen may inscribe with. A pen, a pencil, a quill, a
+# stylus -- none of those is named here, because no shipped law names one.
+ph:Inscriptible rdfs:subClassOf ph:PhysicalCapability ;
+  rdfs:label "The quality of being something one may inscribe with" .
+
+# Named kinds BENEATH a capability, offered so a law whose text names an
+# instrument does not have to invent one. A capability says such things exist;
+# a kind names one. The two are different claims and the file now makes both:
+# `ph:PhysicalCapability` above is what a law REQUIRES, and these are what the
+# world may STOCK.
+#
+# A class a law's text never names is not a requirement the law acquires. An
+# act still qualifies by the CAPABILITY, and is satisfied by a chisel as readily
+# as by a pen -- which is what `check.py`'s instrument-narrowing report checks,
+# and it reads a capability as a capability however many kinds hang beneath it.
+# So these cost a law nothing and save the next one a declaration. What would
+# not be safe is the reverse: a law requiring `ph:Pen` because the file happened
+# to offer it, which is the narrowing this arrangement exists to prevent.
+#
+# Two kinds only, deliberately. A closed set of the common cases is enough for a
+# law to draw on and short enough that a fourth law needing a different one will
+# still trigger the honest question of whether it is that law's alone. No
+# restriction attaches either to `ph:Inscribable`: see decision 8, which is why
+# nothing here can tell a reasoner that a chisel is not a pencil.
+ph:Pen rdfs:subClassOf ph:Inscriptible ;
+  rdfs:label "A pen: something one may inscribe with" .
+ph:Pencil rdfs:subClassOf ph:Inscriptible ;
+  rdfs:label "A pencil: something one may inscribe with" .
+# Something an inscription may be made on.
+ph:Inscribable rdfs:subClassOf ph:PhysicalCapability ;
+  rdfs:label "The quality of being something one may inscribe on" .
+# Something a thing may be put into.
+ph:Container rdfs:subClassOf ph:PhysicalCapability ;
+  rdfs:label "The quality of being something a thing may be put into" .
+
+
+# ---------------------------------------------------------------------------
+# Actions. A physical process, and nothing about its legal meaning.
+#
+# A Process, not a Relator. Writing moves a hand, dispenses ink and alters
+# paper: something happens, and a GFO Process is what something-happening is.
+# A Relator is a truthmaker that binds relata in a state; it does not DO.
+#
+# Which is what lets the two levels coexist. A law's own process is a
+# SPECIALISATION of the one declared here -- `ph:CastVote rdfs:subClassOf
+# ph:Deposit` -- so the same real event is described twice, once physically
+# and once in the law's terms, as two processes with different participants.
+# In mayor-quorum a physical Deposit has a sheet of paper going into a box;
+# the legal CastVote has a ballot vote going into a ballot box. Both describe
+# the same moment. What relates the two is the transformation, not a shared
+# class.
+#
+# A subclass is enough to reach a shared action from a law's hierarchy,
+# which is why the reachability gate accepts a Process grounded by an
+# ancestor the law reaches. Without that, the only way to declare a shared
+# action at all would be for every law to declare it as its own phase, which
+# is the per-law vocabulary this file exists to remove.
+# ---------------------------------------------------------------------------
+
+ph:PhysicalAction rdfs:subClassOf gfo-core:Process ;
+  rdfs:label "A physical process" .
+# Writing something on a thing with an instrument. Which candidate's name,
+# on which sheet, in which election, and what a written sheet thereby IS,
+# are all the law's to say.
+ph:Inscribe rdfs:subClassOf ph:PhysicalAction ;
+  rdfs:label "Inscribing a thing with an instrument" .
+# Putting a thing into a container. Casting a vote is one law's reading of
+# this on a ballot; filing a requisition would be another's.
+ph:Deposit rdfs:subClassOf ph:PhysicalAction ;
+  rdfs:label "Putting a thing into a container" .
+
+
+# ---------------------------------------------------------------------------
+# Relations. Participants of a physical process.
+#
+# Grounded over gfo-core:hasParticipant, because that is what they are: the
+# thing acted on, the instrument used and the container entered are the
+# things taking part in the process. NOT grounded over gfo-light:relates,
+# which would say they are truthmakers binding relata in a state -- a
+# different claim, and the wrong one for something an act does.
+# ---------------------------------------------------------------------------
+
+# What a physical process was performed on.
+ph:actedOn a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasParticipant ;
+  rdfs:domain gfo-core:Process ;
+  rdfs:range gfo-light:Object .
+# The instrument it was performed with.
+ph:actedWith a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasParticipant ;
+  rdfs:domain gfo-core:Process ;
+  rdfs:range gfo-light:Object .
+# What a thing was put into. Range is GFO rather than ph:Container so the
+# grounding holds; what counts as a container is carried by the capability
+# class the individual is typed under.
+ph:placedIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf gfo-core:hasParticipant ;
+  rdfs:domain gfo-light:Object ;
+  rdfs:range gfo-light:Object .
+# Which citizen a thing belongs to. Mailboxes belong to citizens, and a
+# citizen's ballots are made on the sheets that belong to them, so the
+# pairing a duty needs is a declared relation rather than string surgery on
+# IRIs. Declared here rather than per law because the shared populated
+# world relates its furniture this way and two laws' versions would be
+# unrelated. Grounded by type (GFO has no owner-to-owned relation for a
+# container that is not a process participant).
+ph:ownedBy a owl:ObjectProperty ;
+  rdfs:domain gfo-light:Object ;
+  rdfs:range gfo-light:Object .

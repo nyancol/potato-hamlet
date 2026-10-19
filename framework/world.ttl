@@ -1,0 +1,265 @@
+@prefix ph: <https://potato-hamlet.example/ontology/> .
+@prefix gfo-core: <https://w3id.org/gfo-core/> .
+@prefix gfo-light: <https://w3id.org/gfo-light/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ===========================================================================
+# The shared populated world.
+#
+# Individuals only — the schema lives in framework/physical.ttl (shared
+# classes, capabilities, actions) and in each law's ontology.ttl (law
+# vocabulary plus the framework invariants). Every law references these
+# individuals by IRI and never restates them: a case declaring a
+# world-owned IRI fails the gate, the same way restating a shared class
+# does.
+#
+# Stocked once, before any law is proposed, by the hamlet author; reviewed
+# and frozen as a framework artefact (framework/world.freeze). A law's own
+# starting facts — its calendar, its process instances, its states and its
+# roles — live in that law's population.ttl, not here.
+#
+# The clock's READING is runtime-owned mutable state and is excluded from
+# the world freeze hash: only the clock's identity is pinned, so advancing
+# the present never invalidates a review.
+#
+# Individuals use FULL IRIs in angle brackets (a "/" is not valid in a
+# Turtle prefixed name).
+# ===========================================================================
+
+# --- Population: one hamlet, one people.
+#
+# The union of every shipped case's roster. One hamlet means one people, so
+# electorate-dependent semantics (quorum counts, oldest-fallback) are
+# hamlet-wide. Every citizen carries ph:label and ph:age.
+
+<https://potato-hamlet.example/ontology/citizen/alice> a ph:Citizen ;
+  ph:label "Alice" ;
+  ph:age 71 .
+
+<https://potato-hamlet.example/ontology/citizen/bob> a ph:Citizen ;
+  ph:label "Bob" ;
+  ph:age 54 .
+
+<https://potato-hamlet.example/ontology/citizen/cara> a ph:Citizen ;
+  ph:label "Cara" ;
+  ph:age 43 .
+
+<https://potato-hamlet.example/ontology/citizen/ada> a ph:Citizen ;
+  ph:label "Ada" ;
+  ph:age 68 .
+
+<https://potato-hamlet.example/ontology/citizen/barnaby> a ph:Citizen ;
+  ph:label "Barnaby" ;
+  ph:age 55 .
+
+<https://potato-hamlet.example/ontology/citizen/cleo> a ph:Citizen ;
+  ph:label "Cleo" ;
+  ph:age 47 .
+
+<https://potato-hamlet.example/ontology/citizen/dara> a ph:Citizen ;
+  ph:label "Dara" ;
+  ph:age 31 .
+
+<https://potato-hamlet.example/ontology/hamlet> a ph:Hamlet ;
+  ph:label "Potato Hamlet" .
+
+# --- Clock: the hamlet's single present.
+#
+# One simulation, one shared reality, one clock. Every law reads this same
+# individual; the simulation activates one law at a time and the clock
+# persists across activations. The values below are the initial position
+# only — the runtime owns them from the first advance.
+
+<https://potato-hamlet.example/ontology/clock/now> a ph:Clock ;
+  ph:label "Now" ;
+  ph:dayIndex 0 ;
+  ph:atHour 0 .
+
+# --- Furniture: what the hamlet has.
+#
+# Nothing below carries ph:dayIndex or ph:atHour. A physical thing is not a
+# moment, and ph:dayIndex is grounded on gfo-light:TimeBoundary.
+
+<https://potato-hamlet.example/ontology/townhall> a ph:Townhall ;
+  ph:label "The townhall" .
+
+<https://potato-hamlet.example/ontology/ballotbox/2027> a ph:BallotBox ;
+  ph:label "The ballot box" .
+
+<https://potato-hamlet.example/ontology/resultsboard/2027> a ph:ResultsBoard ;
+  ph:label "The big board in the townhall" .
+
+<https://potato-hamlet.example/ontology/registry/2027> a ph:CandidateRegistry ;
+  ph:label "The candidate registry book" .
+
+# One mailbox per citizen of the seeded roster: "put these papers in the
+# mailbox of each citizen". `ph:ownedBy` is what lets `deliver` find where
+# one citizen's papers go without deriving a mailbox IRI from a citizen IRI
+# by string surgery.
+
+<https://potato-hamlet.example/ontology/mailbox/alice> a ph:Mailbox ;
+  ph:label "Alice's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+
+<https://potato-hamlet.example/ontology/mailbox/bob> a ph:Mailbox ;
+  ph:label "Bob's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+
+<https://potato-hamlet.example/ontology/mailbox/cara> a ph:Mailbox ;
+  ph:label "Cara's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+
+<https://potato-hamlet.example/ontology/mailbox/ada> a ph:Mailbox ;
+  ph:label "Ada's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+
+<https://potato-hamlet.example/ontology/mailbox/barnaby> a ph:Mailbox ;
+  ph:label "Barnaby's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+
+<https://potato-hamlet.example/ontology/mailbox/cleo> a ph:Mailbox ;
+  ph:label "Cleo's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+
+<https://potato-hamlet.example/ontology/mailbox/dara> a ph:Mailbox ;
+  ph:label "Dara's mailbox" ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+
+# --- The paper supply, and the instrument.
+#
+# NOT "one paper per candidate for each citizen", which is what a law
+# requires the authority to MAKE: the count depends on who has nominated by
+# the time preparation runs, and that is not knowable here. So this is the
+# supply -- what this hamlet has in the drawer -- and `prepare` writes on
+# what it needs and refuses naming a shortfall if the registry outgrows it.
+#
+# Migrated from the cases' seeds and completed to the union roster: one
+# mailbox per citizen (the law's own rule) and seven sheets each -- the worst
+# case is everyone nominated, so the drawer holds a sheet per citizen per
+# possible candidate. `prepare` still refuses naming a shortfall if a future
+# registry outgrows the drawer rather than silently running short.
+#
+# `ph:ownedBy` says whose papers these are: a citizen's ballots are made on
+# the sheets that belong to them, so the sheets are grouped per citizen
+# rather than paired positionally against the whole population.
+#
+# No sheet carries a `ph:label`. A blank sheet has nothing written on it,
+# and the writing is what `prepare` puts there -- as the sheet's own label.
+
+<https://potato-hamlet.example/ontology/paper/alice-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+<https://potato-hamlet.example/ontology/paper/alice-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/alice> .
+
+<https://potato-hamlet.example/ontology/paper/bob-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+<https://potato-hamlet.example/ontology/paper/bob-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/bob> .
+
+<https://potato-hamlet.example/ontology/paper/cara-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+<https://potato-hamlet.example/ontology/paper/cara-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cara> .
+
+<https://potato-hamlet.example/ontology/paper/ada-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+<https://potato-hamlet.example/ontology/paper/ada-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/ada> .
+
+<https://potato-hamlet.example/ontology/paper/barnaby-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+<https://potato-hamlet.example/ontology/paper/barnaby-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/barnaby> .
+
+<https://potato-hamlet.example/ontology/paper/cleo-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+<https://potato-hamlet.example/ontology/paper/cleo-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/cleo> .
+
+<https://potato-hamlet.example/ontology/paper/dara-1> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-2> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-3> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-4> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-5> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-6> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+<https://potato-hamlet.example/ontology/paper/dara-7> a ph:Sheet ;
+  ph:ownedBy <https://potato-hamlet.example/ontology/citizen/dara> .
+
+# The instrument, typed by the QUALIFICATION it has rather than by a kind
+# of thing. No law text says "with a pen" -- each says to write and leaves
+# the instrument open, so a hamlet stocked only with some other inscriptible
+# thing satisfies `prepare`, and one stocked with nothing inscriptible is
+# refused.
+
+<https://potato-hamlet.example/ontology/instrument/authority>
+  a ph:Inscriptible ;
+  ph:label "The authority's writing instrument" .

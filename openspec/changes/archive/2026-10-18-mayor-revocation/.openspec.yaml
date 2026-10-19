@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-10-10
+# No spec delta, deliberately. Every semantic this flavour exercises --
+# ph:causedBy between a Process and a State with evaluation in the Lean
+# guard, cancellation that retains individuals while recording non-count in
+# the outcome, termination mid-span as an ordinary finish, runtime-minted
+# calendar individuals dated only by Lean, ECAs declaring the Process class
+# they create -- is already in `law-framework` and `law-extraction`.
+# This change is a new law satisfying those requirements without changing
+# one, which is the point: the requirements do not need rewriting to
+# accept a conforming law.
+skip_specs: true
